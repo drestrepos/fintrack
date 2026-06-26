@@ -1,46 +1,1337 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta name="theme-color" content="#1a73e8" />
+  <meta name="theme-color" content="#0d0f14" />
   <meta name="description" content="FinTrack - Gestión de finanzas personales" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="FinTrack" />
-
   <title>FinTrack</title>
-
   <link rel="manifest" href="/manifest.json" />
-  <link rel="stylesheet" href="/css/styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    /* ============================================================
+       CSS VARIABLES — DARK (default) & LIGHT themes
+    ============================================================ */
+    :root {
+      --bg:         #0d0f14;
+      --surface:    #161923;
+      --surface2:   #1e2330;
+      --surface3:   #252d3d;
+      --border:     #2a3040;
+      --text:       #e8eaf0;
+      --text-muted: #7a8499;
+      --text-dim:   #3d4a60;
+      --accent:     #00e5a0;
+      --accent-dim: rgba(0,229,160,.12);
+      --warn:       #ff6b6b;
+      --warn-dim:   rgba(255,107,107,.12);
+      --income:     #00e5a0;
+      --expense:    #ff6b6b;
+      --transfer:   #7c9ef8;
+      --nav-h:      68px;
+      --header-h:   56px;
+      --radius:     16px;
+      --radius-sm:  10px;
+      --radius-xs:  6px;
+      --shadow:     0 4px 24px rgba(0,0,0,.45);
+      --shadow-sm:  0 2px 8px rgba(0,0,0,.3);
+      --font:       'Sora', system-ui, sans-serif;
+      --mono:       'JetBrains Mono', monospace;
+      --t:          .2s cubic-bezier(.4,0,.2,1);
+    }
+
+    [data-theme="light"] {
+      --bg:         #f0f2f7;
+      --surface:    #ffffff;
+      --surface2:   #f5f7fa;
+      --surface3:   #eaecf3;
+      --border:     #dde1ea;
+      --text:       #1a1f2e;
+      --text-muted: #6b7280;
+      --text-dim:   #c0c8d8;
+      --accent:     #00b87a;
+      --accent-dim: rgba(0,184,122,.12);
+      --warn:       #e53e3e;
+      --warn-dim:   rgba(229,62,62,.12);
+      --income:     #00b87a;
+      --expense:    #e53e3e;
+      --transfer:   #4f6ef7;
+      --shadow:     0 4px 24px rgba(0,0,0,.08);
+      --shadow-sm:  0 2px 8px rgba(0,0,0,.05);
+    }
+
+    /* ============================================================
+       RESET & BASE
+    ============================================================ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 15px;
+      -webkit-font-smoothing: antialiased;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    button { font-family: var(--font); border: none; background: none; cursor: pointer; color: inherit; }
+    input, select, textarea { font-family: var(--font); border: none; outline: none; background: none; color: inherit; }
+
+    /* ============================================================
+       APP SHELL
+    ============================================================ */
+    #app {
+      height: 100vh;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ---- HEADER ---- */
+    #app-header {
+      height: var(--header-h);
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      flex-shrink: 0;
+      z-index: 10;
+    }
+
+    #app-header h1 {
+      font-size: 19px;
+      font-weight: 700;
+      letter-spacing: -.4px;
+      color: var(--accent);
+    }
+
+    #header-period {
+      font-size: 13px;
+      color: var(--text-muted);
+      font-weight: 500;
+      padding: 6px 12px;
+      background: var(--surface2);
+      border-radius: 20px;
+      border: 1px solid var(--border);
+    }
+
+    .icon-btn {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      transition: background var(--t);
+    }
+    .icon-btn:active { background: var(--surface3); }
+
+    /* ---- MAIN ---- */
+    #app-main { flex: 1; overflow: hidden; position: relative; }
+
+    /* ---- VIEWS ---- */
+    .view {
+      position: absolute; inset: 0;
+      overflow-y: auto; overflow-x: hidden;
+      padding: 16px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+      display: none;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .view::-webkit-scrollbar { display: none; }
+    .view.active { display: block; }
+
+    /* ---- BOTTOM NAV ---- */
+    #nav-tabs {
+      height: var(--nav-h);
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      flex-shrink: 0;
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    .nav-tab {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 4px; padding: 8px 2px;
+      color: var(--text-dim);
+      transition: color var(--t);
+      position: relative;
+    }
+    .nav-tab.active { color: var(--accent); }
+    .nav-tab.active::before {
+      content: '';
+      position: absolute; top: 0; left: 50%;
+      transform: translateX(-50%);
+      width: 28px; height: 2px;
+      background: var(--accent);
+      border-radius: 0 0 2px 2px;
+    }
+    .nav-tab svg { width: 22px; height: 22px; stroke-width: 1.8; transition: transform var(--t); }
+    .nav-tab.active svg { transform: scale(1.1); }
+    .nav-tab span { font-size: 10px; font-weight: 500; letter-spacing: .1px; }
+
+    /* ============================================================
+       SHARED COMPONENTS
+    ============================================================ */
+
+    /* Card */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+
+    /* Section header */
+    .section-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .section-title { font-size: 14px; font-weight: 700; }
+    .section-link  { font-size: 13px; font-weight: 600; color: var(--accent); }
+
+    /* Form fields */
+    .field { margin-bottom: 10px; }
+    .field-inner {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      display: flex; align-items: center; gap: 8px;
+      transition: border-color var(--t);
+    }
+    .field-inner:focus-within { border-color: var(--accent); }
+    .field-icon { font-size: 15px; flex-shrink: 0; color: var(--text-muted); }
+    .field-input { flex: 1; font-size: 15px; }
+    .field-input::placeholder { color: var(--text-dim); }
+    .field-input.mono { font-family: var(--mono); font-size: 16px; font-weight: 500; }
+    .amount-prefix { font-family: var(--mono); font-size: 16px; font-weight: 600; color: var(--text-muted); }
+    select.field-input { -webkit-appearance: none; appearance: none; }
+
+    /* Type Toggle */
+    .type-toggle {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+      background: var(--surface2);
+      padding: 4px;
+      border-radius: var(--radius-sm);
+      margin-bottom: 12px;
+    }
+    .type-toggle-btn {
+      padding: 8px 10px;
+      border-radius: 7px;
+      font-size: 13px; font-weight: 600;
+      text-align: center;
+      color: var(--text-muted);
+      transition: all var(--t);
+    }
+    .type-toggle-btn.active[data-type="credit"]   { background: var(--income);   color: #0d0f14; }
+    .type-toggle-btn.active[data-type="debit"]    { background: var(--expense);  color: #fff; }
+    .type-toggle-btn.active[data-type="transfer"] { background: var(--transfer); color: #fff; }
+
+    /* Primary button */
+    .btn-primary {
+      width: 100%; padding: 13px;
+      background: var(--accent); color: #0d0f14;
+      border-radius: var(--radius-sm);
+      font-size: 15px; font-weight: 700; text-align: center;
+      transition: opacity var(--t), transform var(--t);
+      letter-spacing: .2px;
+    }
+    .btn-primary:active { opacity: .85; transform: scale(.99); }
+
+    /* Transaction item (shared) */
+    .tx-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 11px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .tx-item:last-child { border-bottom: none; }
+    .tx-icon {
+      width: 40px; height: 40px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; flex-shrink: 0;
+      background: var(--surface2);
+    }
+    .tx-info { flex: 1; min-width: 0; }
+    .tx-name {
+      font-size: 14px; font-weight: 600;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .tx-meta { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
+    .tx-amount { font-family: var(--mono); font-size: 14px; font-weight: 600; flex-shrink: 0; }
+    .tx-amount.income   { color: var(--income); }
+    .tx-amount.expense  { color: var(--expense); }
+    .tx-amount.transfer { color: var(--transfer); }
+
+    /* Empty state */
+    .empty-state {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 40px 20px; text-align: center;
+    }
+    .empty-icon  { font-size: 48px; margin-bottom: 12px; opacity: .4; }
+    .empty-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+    .empty-desc  { font-size: 13px; color: var(--text-muted); }
+
+    /* ============================================================
+       VIEW: INICIO
+    ============================================================ */
+
+    /* Balance card */
+    #balance-card {
+      background: linear-gradient(135deg, var(--surface) 0%, var(--surface2) 100%);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px; margin-bottom: 12px;
+      position: relative; overflow: hidden;
+    }
+    #balance-card::before {
+      content: '';
+      position: absolute; top: -50px; right: -50px;
+      width: 150px; height: 150px;
+      background: var(--accent-dim);
+      border-radius: 50%;
+    }
+    #balance-label {
+      font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: .8px;
+      color: var(--text-muted); margin-bottom: 4px;
+      position: relative;
+    }
+    #balance-total {
+      font-family: var(--mono);
+      font-size: 34px; font-weight: 600; letter-spacing: -1px;
+      margin-bottom: 16px; position: relative;
+    }
+    .balance-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .balance-stat { display: flex; flex-direction: column; gap: 2px; }
+    .balance-stat .stat-lbl { font-size: 11px; color: var(--text-muted); font-weight: 500; }
+    .balance-stat .stat-val { font-family: var(--mono); font-size: 15px; font-weight: 600; }
+    .stat-income  { color: var(--income); }
+    .stat-expense { color: var(--expense); }
+
+    /* Quick-add form */
+    #quick-add-form {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px; margin-bottom: 12px;
+    }
+    .form-label {
+      display: block;
+      font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: .8px;
+      color: var(--text-muted); margin-bottom: 10px;
+    }
+
+    /* Double-entry collapsible */
+    .de-toggle {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 12px;
+      background: var(--surface2);
+      border: 1px dashed var(--border);
+      border-radius: var(--radius-sm);
+      margin-bottom: 10px;
+      font-size: 13px; font-weight: 500; color: var(--text-muted);
+      transition: background var(--t);
+    }
+    .de-toggle:active { background: var(--surface3); }
+    .de-toggle-icon { font-size: 16px; transition: transform var(--t); }
+    .de-toggle.open .de-toggle-icon { transform: rotate(45deg); }
+
+    #de-panel { display: none; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; margin-bottom: 10px; }
+    #de-panel.open { display: block; }
+
+    .entry-row {
+      display: grid; grid-template-columns: 1fr auto auto;
+      align-items: center; gap: 8px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .entry-row:last-of-type { border-bottom: none; }
+    .entry-account { font-size: 13px; font-weight: 500; }
+    .entry-side {
+      font-size: 11px; font-weight: 700;
+      padding: 2px 8px; border-radius: 4px;
+      text-transform: uppercase;
+    }
+    .entry-side.debe  { background: var(--warn-dim);   color: var(--expense); }
+    .entry-side.haber { background: var(--accent-dim); color: var(--income); }
+    .entry-amount { font-family: var(--mono); font-size: 13px; font-weight: 600; }
+
+    .add-entry-btn {
+      width: 100%; padding: 9px;
+      font-size: 13px; font-weight: 600; color: var(--accent);
+      background: var(--accent-dim);
+      border-top: 1px solid var(--border);
+      text-align: center;
+    }
+
+    /* ============================================================
+       VIEW: MOVIMIENTOS
+    ============================================================ */
+
+    .filter-row {
+      display: flex; gap: 8px;
+      overflow-x: auto; padding-bottom: 4px;
+      margin-bottom: 14px; scrollbar-width: none;
+    }
+    .filter-row::-webkit-scrollbar { display: none; }
+
+    .chip {
+      flex-shrink: 0;
+      padding: 6px 14px; border-radius: 20px;
+      font-size: 13px; font-weight: 600;
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text-muted);
+      transition: all var(--t);
+    }
+    .chip.active {
+      background: var(--accent-dim);
+      border-color: var(--accent); color: var(--accent);
+    }
+    .chip.chip-warn { }
+    .chip.chip-warn.active {
+      background: var(--warn-dim);
+      border-color: var(--expense); color: var(--expense);
+    }
+
+    .tx-group {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden; margin-bottom: 10px;
+    }
+    .tx-group-date {
+      padding: 7px 14px;
+      background: var(--surface2);
+      font-size: 11px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .6px;
+      color: var(--text-muted);
+    }
+    .tx-group-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--border);
+      transition: background var(--t);
+    }
+    .tx-group-item:last-child { border-bottom: none; }
+    .tx-group-item:active { background: var(--surface2); }
+
+    /* FAB */
+    #fab {
+      position: fixed;
+      bottom: calc(var(--nav-h) + 16px + env(safe-area-inset-bottom, 0px));
+      right: 20px;
+      width: 56px; height: 56px;
+      background: var(--accent);
+      border-radius: 16px;
+      display: none;
+      align-items: center; justify-content: center;
+      box-shadow: 0 8px 24px rgba(0,229,160,.38);
+      z-index: 100;
+      color: #0d0f14;
+      transition: transform var(--t), box-shadow var(--t);
+    }
+    #fab.visible { display: flex; }
+    #fab:active  { transform: scale(.92); box-shadow: 0 4px 12px rgba(0,229,160,.25); }
+
+    /* ============================================================
+       VIEW: CUENTAS
+    ============================================================ */
+
+    .accounts-summary {
+      background: linear-gradient(135deg, var(--surface) 0%, var(--surface2) 100%);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px; margin-bottom: 12px; text-align: center;
+    }
+    .accounts-summary .sum-label {
+      font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: .8px;
+      color: var(--text-muted); margin-bottom: 6px;
+    }
+    .accounts-summary .sum-total {
+      font-family: var(--mono); font-size: 30px; font-weight: 600; letter-spacing: -.5px;
+    }
+
+    .account-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 14px 16px;
+      margin-bottom: 10px;
+      display: flex; align-items: center; gap: 14px;
+      transition: background var(--t);
+    }
+    .account-card:active { background: var(--surface2); }
+
+    .account-icon {
+      width: 44px; height: 44px; border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; flex-shrink: 0;
+    }
+    .ai-checking { background: #1e3a5f; }
+    .ai-savings  { background: #1a3a2a; }
+    .ai-credit   { background: #3a1a2a; }
+    .ai-cash     { background: #2a2a1a; }
+    .ai-invest   { background: #1a1a3a; }
+
+    [data-theme="light"] .ai-checking { background: #dbeafe; }
+    [data-theme="light"] .ai-savings  { background: #d1fae5; }
+    [data-theme="light"] .ai-credit   { background: #fce7f3; }
+    [data-theme="light"] .ai-cash     { background: #fef9c3; }
+    [data-theme="light"] .ai-invest   { background: #ede9fe; }
+
+    .account-info { flex: 1; }
+    .account-name { font-size: 15px; font-weight: 600; }
+    .account-type { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    .account-balance { font-family: var(--mono); font-size: 16px; font-weight: 600; }
+    .account-balance.neg { color: var(--expense); }
+
+    .btn-add-account {
+      width: 100%; padding: 13px;
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      font-size: 14px; font-weight: 600; color: var(--text-muted);
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      transition: all var(--t);
+    }
+    .btn-add-account:active { background: var(--surface2); border-color: var(--accent); color: var(--accent); }
+
+    /* ============================================================
+       VIEW: PRESUPUESTO
+    ============================================================ */
+
+    .budget-summary {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 16px; margin-bottom: 12px;
+    }
+    .budget-period-row {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 14px;
+      font-size: 14px; font-weight: 600; color: var(--text);
+    }
+    .budget-nav { display: flex; gap: 8px; }
+    .period-btn {
+      width: 28px; height: 28px; border-radius: 8px;
+      background: var(--surface2); border: 1px solid var(--border);
+      font-size: 15px; display: flex; align-items: center; justify-content: center;
+    }
+
+    .budget-stats {
+      display: grid; grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px; margin-bottom: 14px;
+    }
+    .budget-stat {
+      background: var(--surface2); border-radius: var(--radius-sm);
+      padding: 10px; text-align: center;
+    }
+    .bstat-lbl {
+      font-size: 10px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: .5px;
+      color: var(--text-muted); margin-bottom: 4px;
+    }
+    .bstat-val { font-family: var(--mono); font-size: 14px; font-weight: 600; }
+    .bstat-green { color: var(--income); }
+    .bstat-red   { color: var(--expense); }
+
+    .progress-bar { height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+    .progress-fill { height: 100%; border-radius: 3px; transition: width .5s cubic-bezier(.4,0,.2,1); }
+    .progress-fill.ok   { background: var(--income); }
+    .progress-fill.warn { background: #f59e0b; }
+    .progress-fill.over { background: var(--expense); }
+
+    .budget-cat {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 14px; margin-bottom: 10px;
+    }
+    .budget-cat-header {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+    }
+    .budget-cat-icon { font-size: 20px; }
+    .budget-cat-info { flex: 1; }
+    .budget-cat-name { font-size: 14px; font-weight: 600; }
+    .budget-cat-amounts { font-size: 12px; color: var(--text-muted); font-family: var(--mono); margin-top: 2px; }
+    .budget-cat-pct { font-family: var(--mono); font-size: 13px; font-weight: 700; }
+
+    /* ============================================================
+       VIEW: CONFIG
+    ============================================================ */
+
+    .config-section {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: hidden; margin-bottom: 12px;
+    }
+    .config-section-title {
+      font-size: 11px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .8px;
+      color: var(--text-muted); padding: 12px 16px 6px;
+    }
+    .config-item {
+      display: flex; align-items: center; gap: 14px;
+      padding: 13px 16px;
+      border-bottom: 1px solid var(--border);
+      transition: background var(--t);
+    }
+    .config-item:last-child { border-bottom: none; }
+    .config-item:active { background: var(--surface2); }
+    .config-icon  { font-size: 20px; width: 24px; text-align: center; }
+    .config-info  { flex: 1; }
+    .config-label { font-size: 14px; font-weight: 600; }
+    .config-desc  { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
+    .config-val   { font-size: 13px; color: var(--text-muted); }
+    .chevron      { color: var(--text-dim); font-size: 16px; }
+
+    /* Toggle switch */
+    .toggle-sw {
+      width: 44px; height: 24px;
+      background: var(--surface3); border-radius: 12px;
+      position: relative; cursor: pointer; flex-shrink: 0;
+      transition: background var(--t);
+    }
+    .toggle-sw.on { background: var(--accent); }
+    .toggle-sw::after {
+      content: '';
+      position: absolute; top: 2px; left: 2px;
+      width: 20px; height: 20px; border-radius: 50%;
+      background: var(--text);
+      transition: transform var(--t), background var(--t);
+    }
+    .toggle-sw.on::after { transform: translateX(20px); background: #0d0f14; }
+
+    /* ============================================================
+       MODAL
+    ============================================================ */
+    #modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.7);
+      z-index: 200;
+      display: none; align-items: flex-end; justify-content: center;
+      backdrop-filter: blur(4px);
+    }
+    #modal-overlay.open { display: flex; }
+
+    #tx-modal {
+      background: var(--surface);
+      border-radius: var(--radius) var(--radius) 0 0;
+      width: 100%; max-width: 480px;
+      max-height: 92vh; overflow-y: auto;
+      scrollbar-width: none;
+      animation: slideUp .25s cubic-bezier(.4,0,.2,1);
+    }
+    #tx-modal::-webkit-scrollbar { display: none; }
+
+    @keyframes slideUp {
+      from { transform: translateY(100%); }
+      to   { transform: translateY(0); }
+    }
+
+    .modal-handle {
+      width: 36px; height: 4px;
+      background: var(--border); border-radius: 2px;
+      margin: 12px auto 0;
+    }
+    .modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 16px; border-bottom: 1px solid var(--border);
+    }
+    .modal-title { font-size: 17px; font-weight: 700; }
+    .modal-close {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: var(--surface2); display: flex; align-items: center; justify-content: center;
+      font-size: 15px; color: var(--text-muted);
+    }
+    .modal-body { padding: 16px; }
+    .modal-section-lbl {
+      font-size: 11px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .8px;
+      color: var(--text-muted); margin: 14px 0 8px;
+    }
+
+    /* Modal double-entry table */
+    .modal-entries {
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      overflow: hidden; margin-bottom: 10px;
+    }
+    .modal-entry-row {
+      display: grid; grid-template-columns: 1fr 62px 72px 28px;
+      gap: 6px; align-items: center;
+      padding: 9px 12px; border-bottom: 1px solid var(--border);
+    }
+    .modal-entry-row:last-of-type { border-bottom: none; }
+    .modal-entry-select {
+      font-size: 13px; background: none; border: none; outline: none; color: var(--text); width: 100%;
+    }
+    .modal-entry-side {
+      font-size: 11px; font-weight: 700; padding: 3px 6px;
+      border-radius: 4px; text-align: center; border: none; cursor: pointer;
+    }
+    .modal-entry-amount {
+      font-family: var(--mono); font-size: 13px; font-weight: 500;
+      background: none; border: none; outline: none;
+      width: 100%; color: var(--text); text-align: right;
+    }
+    .modal-entry-del { color: var(--text-dim); font-size: 16px; text-align: center; }
+    .modal-add-entry {
+      width: 100%; padding: 9px; text-align: center;
+      font-size: 13px; font-weight: 600; color: var(--accent);
+      background: var(--accent-dim);
+    }
+
+    /* Balance check */
+    .balance-check {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 12px;
+      background: var(--surface2); border-radius: var(--radius-sm);
+      margin-bottom: 12px; font-size: 13px;
+    }
+    .balance-ok   { color: var(--income); font-weight: 600; }
+    .balance-fail { color: var(--expense); font-weight: 600; }
+
+    /* ============================================================
+       TOAST
+    ============================================================ */
+    #toast-container {
+      position: fixed;
+      top: calc(var(--header-h) + 8px); left: 50%; transform: translateX(-50%);
+      z-index: 300;
+      display: flex; flex-direction: column; gap: 8px;
+      pointer-events: none;
+      width: calc(100% - 32px); max-width: 400px;
+    }
+    .toast {
+      padding: 12px 16px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 14px; font-weight: 500;
+      box-shadow: var(--shadow);
+      animation: toastIn .25s cubic-bezier(.4,0,.2,1);
+    }
+    .toast.success { border-left: 3px solid var(--income); }
+    .toast.error   { border-left: 3px solid var(--expense); }
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateY(-10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ============================================================
+       SKELETON
+    ============================================================ */
+    .skeleton {
+      background: linear-gradient(90deg, var(--surface2) 25%, var(--surface3) 50%, var(--surface2) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.4s infinite;
+      border-radius: var(--radius-xs);
+    }
+    @keyframes shimmer {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+  </style>
 </head>
 <body>
-  <div id="app">
-    <header id="app-header">
-      <h1>FinTrack</h1>
-    </header>
+<div id="app">
 
-    <main id="app-main">
-      <p>Cargando...</p>
-    </main>
+  <!-- ======================================================
+       HEADER
+  ====================================================== -->
+  <header id="app-header">
+    <h1>FinTrack</h1>
+    <button id="header-period" type="button">Jun 2026</button>
+    <button class="icon-btn" id="btn-notifications" aria-label="Notificaciones">
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0"/>
+      </svg>
+    </button>
+  </header>
 
-    <nav id="app-nav">
-      <button data-view="dashboard">Inicio</button>
-      <button data-view="transactions">Movimientos</button>
-      <button data-view="budgets">Presupuesto</button>
-      <button data-view="journal">Diario</button>
-    </nav>
+  <!-- ======================================================
+       MAIN
+  ====================================================== -->
+  <main id="app-main">
+
+    <!-- ====== VISTA: INICIO ====== -->
+    <section id="view-home" class="view active">
+
+      <!-- Balance card -->
+      <div id="balance-card">
+        <div id="balance-label">Balance Total</div>
+        <div id="balance-total">$0.00</div>
+        <div class="balance-stats">
+          <div class="balance-stat">
+            <span class="stat-lbl">↑ Ingresos</span>
+            <span class="stat-val stat-income" id="balance-income">$0.00</span>
+          </div>
+          <div class="balance-stat">
+            <span class="stat-lbl">↓ Gastos</span>
+            <span class="stat-val stat-expense" id="balance-expenses">$0.00</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick-add form -->
+      <form id="quick-add-form" novalidate>
+        <span class="form-label">Nueva Transacción</span>
+
+        <div class="type-toggle" id="type-toggle">
+          <button type="button" class="type-toggle-btn active" data-type="credit">+ Ingreso</button>
+          <button type="button" class="type-toggle-btn" data-type="debit">− Gasto</button>
+        </div>
+
+        <div class="field">
+          <div class="field-inner">
+            <span class="field-icon">✏️</span>
+            <input type="text" id="tx-name" class="field-input" placeholder="Descripción" autocomplete="off" />
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-inner">
+            <span class="amount-prefix">$</span>
+            <input type="number" id="tx-amount" class="field-input mono" placeholder="0.00" step="0.01" min="0" inputmode="decimal" />
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-inner">
+            <span class="field-icon">🏦</span>
+            <select id="tx-account" class="field-input">
+              <option value="">Seleccionar cuenta</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-inner">
+            <span class="field-icon">🏷️</span>
+            <select id="tx-category" class="field-input">
+              <option value="">Categoría (opc.)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Partida doble colapsable -->
+        <div class="de-toggle" id="de-toggle">
+          <span>⚖️ Partida doble</span>
+          <span class="de-toggle-icon">＋</span>
+        </div>
+
+        <div id="de-panel">
+          <div id="de-rows">
+            <div class="entry-row">
+              <span class="entry-account">Efectivo</span>
+              <span class="entry-side debe">Debe</span>
+              <span class="entry-amount">$0.00</span>
+            </div>
+            <div class="entry-row">
+              <span class="entry-account">Ingresos</span>
+              <span class="entry-side haber">Haber</span>
+              <span class="entry-amount">$0.00</span>
+            </div>
+          </div>
+          <button type="button" class="add-entry-btn" id="de-add-line">+ Agregar línea</button>
+        </div>
+
+        <button type="submit" class="btn-primary" id="quick-add-submit">Registrar</button>
+      </form>
+
+      <!-- Últimas transacciones -->
+      <div class="section-header">
+        <span class="section-title">Últimas transacciones</span>
+        <button type="button" class="section-link" data-nav="transactions">Ver todo →</button>
+      </div>
+
+      <div id="tx-list">
+        <div class="empty-state">
+          <div class="empty-icon">📭</div>
+          <div class="empty-title">Sin movimientos</div>
+          <div class="empty-desc">Registra tu primera transacción arriba</div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ====== VISTA: MOVIMIENTOS ====== -->
+    <section id="view-transactions" class="view">
+
+      <div class="filter-row" id="tx-filters">
+        <button type="button" class="chip active" data-filter="all">Todos</button>
+        <button type="button" class="chip" data-filter="income">Ingresos</button>
+        <button type="button" class="chip chip-warn" data-filter="expense">Gastos</button>
+        <button type="button" class="chip" data-filter="transfer">Transferencias</button>
+        <button type="button" class="chip" data-filter="date">📅 Fecha</button>
+      </div>
+
+      <div id="tx-list-full">
+        <!-- Ejemplo — JS reemplaza -->
+        <div class="tx-group">
+          <div class="tx-group-date">Hoy</div>
+          <div class="tx-group-item">
+            <div class="tx-icon">🛒</div>
+            <div class="tx-info">
+              <div class="tx-name">Supermercado</div>
+              <div class="tx-meta">Efectivo · Alimentación</div>
+            </div>
+            <div class="tx-amount expense">−$45.00</div>
+          </div>
+          <div class="tx-group-item">
+            <div class="tx-icon">💼</div>
+            <div class="tx-info">
+              <div class="tx-name">Salario</div>
+              <div class="tx-meta">Cuenta corriente · Ingresos</div>
+            </div>
+            <div class="tx-amount income">+$2,500.00</div>
+          </div>
+        </div>
+        <div class="tx-group">
+          <div class="tx-group-date">Ayer</div>
+          <div class="tx-group-item">
+            <div class="tx-icon">⚡</div>
+            <div class="tx-info">
+              <div class="tx-name">Electricidad</div>
+              <div class="tx-meta">Cuenta corriente · Servicios</div>
+            </div>
+            <div class="tx-amount expense">−$120.00</div>
+          </div>
+          <div class="tx-group-item">
+            <div class="tx-icon">⇄</div>
+            <div class="tx-info">
+              <div class="tx-name">Transferencia ahorros</div>
+              <div class="tx-meta">Corriente → Ahorros</div>
+            </div>
+            <div class="tx-amount transfer">$500.00</div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ====== VISTA: CUENTAS ====== -->
+    <section id="view-accounts" class="view">
+
+      <div class="accounts-summary">
+        <div class="sum-label">Activos netos</div>
+        <div class="sum-total" id="accounts-net-total">$0.00</div>
+      </div>
+
+      <div id="accounts-list">
+        <div class="account-card">
+          <div class="account-icon ai-checking">🏦</div>
+          <div class="account-info">
+            <div class="account-name">Cuenta corriente</div>
+            <div class="account-type">Checking</div>
+          </div>
+          <div class="account-balance" id="acc-checking">$0.00</div>
+        </div>
+        <div class="account-card">
+          <div class="account-icon ai-savings">💰</div>
+          <div class="account-info">
+            <div class="account-name">Ahorros</div>
+            <div class="account-type">Savings</div>
+          </div>
+          <div class="account-balance" id="acc-savings">$0.00</div>
+        </div>
+        <div class="account-card">
+          <div class="account-icon ai-credit">💳</div>
+          <div class="account-info">
+            <div class="account-name">Tarjeta de crédito</div>
+            <div class="account-type">Credit</div>
+          </div>
+          <div class="account-balance neg" id="acc-credit">$0.00</div>
+        </div>
+        <div class="account-card">
+          <div class="account-icon ai-cash">💵</div>
+          <div class="account-info">
+            <div class="account-name">Efectivo</div>
+            <div class="account-type">Cash</div>
+          </div>
+          <div class="account-balance" id="acc-cash">$0.00</div>
+        </div>
+        <div class="account-card">
+          <div class="account-icon ai-invest">📈</div>
+          <div class="account-info">
+            <div class="account-name">Inversiones</div>
+            <div class="account-type">Investment</div>
+          </div>
+          <div class="account-balance" id="acc-invest">$0.00</div>
+        </div>
+      </div>
+
+      <button type="button" class="btn-add-account" id="btn-add-account">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+        </svg>
+        Agregar cuenta
+      </button>
+
+    </section>
+
+    <!-- ====== VISTA: PRESUPUESTO ====== -->
+    <section id="view-budget" class="view">
+
+      <div class="budget-summary">
+        <div class="budget-period-row">
+          <span id="budget-period-label">Junio 2026</span>
+          <div class="budget-nav">
+            <button type="button" class="period-btn" id="budget-prev">‹</button>
+            <button type="button" class="period-btn" id="budget-next">›</button>
+          </div>
+        </div>
+        <div class="budget-stats">
+          <div class="budget-stat">
+            <div class="bstat-lbl">Presup.</div>
+            <div class="bstat-val" id="budget-total-budget">$0</div>
+          </div>
+          <div class="budget-stat">
+            <div class="bstat-lbl">Gastado</div>
+            <div class="bstat-val bstat-red" id="budget-total-spent">$0</div>
+          </div>
+          <div class="budget-stat">
+            <div class="bstat-lbl">Restante</div>
+            <div class="bstat-val bstat-green" id="budget-total-remaining">$0</div>
+          </div>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill ok" id="budget-total-bar" style="width:0%"></div>
+        </div>
+      </div>
+
+      <div id="budget-categories">
+        <div class="budget-cat">
+          <div class="budget-cat-header">
+            <span class="budget-cat-icon">🛒</span>
+            <div class="budget-cat-info">
+              <div class="budget-cat-name">Alimentación</div>
+              <div class="budget-cat-amounts">$320 / $500</div>
+            </div>
+            <div class="budget-cat-pct" style="color:var(--income)">64%</div>
+          </div>
+          <div class="progress-bar"><div class="progress-fill ok" style="width:64%"></div></div>
+        </div>
+
+        <div class="budget-cat">
+          <div class="budget-cat-header">
+            <span class="budget-cat-icon">🚌</span>
+            <div class="budget-cat-info">
+              <div class="budget-cat-name">Transporte</div>
+              <div class="budget-cat-amounts">$180 / $200</div>
+            </div>
+            <div class="budget-cat-pct" style="color:#f59e0b">90%</div>
+          </div>
+          <div class="progress-bar"><div class="progress-fill warn" style="width:90%"></div></div>
+        </div>
+
+        <div class="budget-cat">
+          <div class="budget-cat-header">
+            <span class="budget-cat-icon">🏠</span>
+            <div class="budget-cat-info">
+              <div class="budget-cat-name">Vivienda</div>
+              <div class="budget-cat-amounts">$850 / $800</div>
+            </div>
+            <div class="budget-cat-pct" style="color:var(--expense)">106%</div>
+          </div>
+          <div class="progress-bar"><div class="progress-fill over" style="width:100%"></div></div>
+        </div>
+
+        <div class="budget-cat">
+          <div class="budget-cat-header">
+            <span class="budget-cat-icon">🎮</span>
+            <div class="budget-cat-info">
+              <div class="budget-cat-name">Entretenimiento</div>
+              <div class="budget-cat-amounts">$45 / $150</div>
+            </div>
+            <div class="budget-cat-pct" style="color:var(--income)">30%</div>
+          </div>
+          <div class="progress-bar"><div class="progress-fill ok" style="width:30%"></div></div>
+        </div>
+
+        <div class="budget-cat">
+          <div class="budget-cat-header">
+            <span class="budget-cat-icon">💊</span>
+            <div class="budget-cat-info">
+              <div class="budget-cat-name">Salud</div>
+              <div class="budget-cat-amounts">$60 / $100</div>
+            </div>
+            <div class="budget-cat-pct" style="color:var(--income)">60%</div>
+          </div>
+          <div class="progress-bar"><div class="progress-fill ok" style="width:60%"></div></div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ====== VISTA: CONFIG ====== -->
+    <section id="view-config" class="view">
+
+      <div class="card" style="text-align:center;padding:20px 16px;margin-bottom:12px;">
+        <div style="font-size:48px;margin-bottom:8px;">👤</div>
+        <div style="font-size:16px;font-weight:700;">Mi cuenta</div>
+        <div style="font-size:13px;color:var(--text-muted);margin-top:4px;">drestrepo@premier.pr</div>
+      </div>
+
+      <div class="config-section">
+        <div class="config-section-title">Apariencia</div>
+        <div class="config-item" id="theme-toggle-item">
+          <span class="config-icon">🌙</span>
+          <div class="config-info">
+            <div class="config-label">Tema oscuro</div>
+            <div class="config-desc">Cambiar entre oscuro y claro</div>
+          </div>
+          <div class="toggle-sw on" id="theme-toggle"></div>
+        </div>
+      </div>
+
+      <div class="config-section">
+        <div class="config-section-title">Preferencias</div>
+        <div class="config-item">
+          <span class="config-icon">💱</span>
+          <div class="config-info">
+            <div class="config-label">Moneda</div>
+            <div class="config-desc">Moneda principal</div>
+          </div>
+          <span class="config-val">USD</span>
+          <span class="chevron">›</span>
+        </div>
+        <div class="config-item">
+          <span class="config-icon">🌐</span>
+          <div class="config-info">
+            <div class="config-label">Idioma</div>
+          </div>
+          <span class="config-val">Español</span>
+          <span class="chevron">›</span>
+        </div>
+        <div class="config-item">
+          <span class="config-icon">📅</span>
+          <div class="config-info">
+            <div class="config-label">Inicio de semana</div>
+          </div>
+          <span class="config-val">Lunes</span>
+          <span class="chevron">›</span>
+        </div>
+      </div>
+
+      <div class="config-section">
+        <div class="config-section-title">Datos</div>
+        <div class="config-item">
+          <span class="config-icon">🗂️</span>
+          <div class="config-info">
+            <div class="config-label">Categorías</div>
+            <div class="config-desc">Gestionar categorías</div>
+          </div>
+          <span class="chevron">›</span>
+        </div>
+        <div class="config-item">
+          <span class="config-icon">📤</span>
+          <div class="config-info">
+            <div class="config-label">Exportar datos</div>
+            <div class="config-desc">CSV / Excel</div>
+          </div>
+          <span class="chevron">›</span>
+        </div>
+        <div class="config-item">
+          <span class="config-icon">🔄</span>
+          <div class="config-info">
+            <div class="config-label">Sincronizar</div>
+            <div class="config-desc">Última sync: —</div>
+          </div>
+          <span class="chevron">›</span>
+        </div>
+      </div>
+
+      <div class="config-section">
+        <div class="config-section-title">Sobre la app</div>
+        <div class="config-item">
+          <span class="config-icon">ℹ️</span>
+          <div class="config-info"><div class="config-label">Versión</div></div>
+          <span class="config-val">1.0.0-beta</span>
+        </div>
+      </div>
+
+      <div style="height:24px;"></div>
+    </section>
+
+  </main>
+
+  <!-- ======================================================
+       BOTTOM NAV
+  ====================================================== -->
+  <nav id="nav-tabs">
+    <button type="button" class="nav-tab active" data-view="home">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25"/>
+      </svg>
+      <span>Inicio</span>
+    </button>
+    <button type="button" class="nav-tab" data-view="transactions">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5"/>
+      </svg>
+      <span>Movimientos</span>
+    </button>
+    <button type="button" class="nav-tab" data-view="accounts">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25v10.5A2.25 2.25 0 0 0 4.5 19.5Z"/>
+      </svg>
+      <span>Cuentas</span>
+    </button>
+    <button type="button" class="nav-tab" data-view="budget">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z"/>
+      </svg>
+      <span>Presupuesto</span>
+    </button>
+    <button type="button" class="nav-tab" data-view="config">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"/>
+        <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/>
+      </svg>
+      <span>Config</span>
+    </button>
+  </nav>
+
+</div><!-- /#app -->
+
+<!-- ======================================================
+     FAB
+====================================================== -->
+<button type="button" id="fab" aria-label="Nueva transacción">
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+  </svg>
+</button>
+
+<!-- ======================================================
+     MODAL TRANSACCIÓN
+====================================================== -->
+<div id="modal-overlay">
+  <div id="tx-modal" role="dialog" aria-modal="true" aria-label="Nueva transacción">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <span class="modal-title">Nueva Transacción</span>
+      <button type="button" class="modal-close" id="modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <div class="type-toggle" id="modal-type-toggle" style="grid-template-columns:1fr 1fr 1fr;">
+        <button type="button" class="type-toggle-btn active" data-type="credit">+ Ingreso</button>
+        <button type="button" class="type-toggle-btn" data-type="debit">− Gasto</button>
+        <button type="button" class="type-toggle-btn" data-type="transfer">⇄ Transfer.</button>
+      </div>
+
+      <div class="field">
+        <div class="field-inner">
+          <span class="field-icon">✏️</span>
+          <input type="text" id="modal-tx-name" class="field-input" placeholder="Descripción" autocomplete="off" />
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="field-inner">
+          <span class="amount-prefix">$</span>
+          <input type="number" id="modal-tx-amount" class="field-input mono" placeholder="0.00" step="0.01" min="0" inputmode="decimal" />
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="field-inner">
+          <span class="field-icon">📅</span>
+          <input type="date" id="modal-tx-date" class="field-input" />
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="field-inner">
+          <span class="field-icon">🏦</span>
+          <select id="modal-tx-account" class="field-input">
+            <option value="">Seleccionar cuenta</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="field-inner">
+          <span class="field-icon">🏷️</span>
+          <select id="modal-tx-category" class="field-input">
+            <option value="">Categoría (opcional)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="field-inner">
+          <span class="field-icon">📝</span>
+          <input type="text" id="modal-tx-notes" class="field-input" placeholder="Notas (opcional)" autocomplete="off" />
+        </div>
+      </div>
+
+      <div class="modal-section-lbl">Partida doble</div>
+
+      <div class="modal-entries" id="modal-entries">
+        <div class="modal-entry-row">
+          <select class="modal-entry-select">
+            <option>Efectivo</option>
+            <option>Cuenta corriente</option>
+            <option>Ahorros</option>
+          </select>
+          <button type="button" class="modal-entry-side entry-side debe">Debe</button>
+          <input type="number" class="modal-entry-amount" placeholder="0.00" inputmode="decimal" />
+          <button type="button" class="modal-entry-del">✕</button>
+        </div>
+        <div class="modal-entry-row">
+          <select class="modal-entry-select">
+            <option>Ingresos</option>
+            <option>Gastos</option>
+            <option>Capital</option>
+          </select>
+          <button type="button" class="modal-entry-side entry-side haber">Haber</button>
+          <input type="number" class="modal-entry-amount" placeholder="0.00" inputmode="decimal" />
+          <button type="button" class="modal-entry-del">✕</button>
+        </div>
+        <button type="button" class="modal-add-entry" id="modal-add-entry">+ Agregar línea</button>
+      </div>
+
+      <div class="balance-check" id="modal-balance-check">
+        <span>Balance de partidas</span>
+        <span class="balance-ok" id="modal-balance-status">✓ Balanceado</span>
+      </div>
+
+      <button type="button" class="btn-primary" id="modal-submit">Guardar transacción</button>
+      <div style="height:16px;"></div>
+    </div>
   </div>
+</div>
 
-  <script src="/js/api.js"></script>
-  <script src="/js/app.js"></script>
-  <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js')
-        .then(reg => console.log('SW registrado:', reg.scope))
-        .catch(err => console.error('SW error:', err));
-    }
-  </script>
+<!-- ======================================================
+     TOAST
+====================================================== -->
+<div id="toast-container"></div>
+
+<!-- ======================================================
+     SCRIPTS
+====================================================== -->
+<script src="/js/api.js"></script>
+<script src="/js/app.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js')
+      .then(reg => console.log('SW registrado:', reg.scope))
+      .catch(err => console.error('SW error:', err));
+  }
+</script>
 </body>
 </html>
