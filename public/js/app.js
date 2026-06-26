@@ -172,20 +172,33 @@ document.addEventListener('DOMContentLoaded', function () {
   // 6. QUICK-ADD
   // ============================================================
   const quickAddForm = $('quick-add-form');
-  quickAddForm && quickAddForm.addEventListener('submit', e => {
+  quickAddForm && quickAddForm.addEventListener('submit', async e => {
     e.preventDefault();
-    const name   = $('tx-name')?.value.trim();
-    const amount = $('tx-amount')?.value;
-    if (!name || !amount || Number(amount) <= 0) {
-      showToast('Completa descripción y monto', 'error');
-      return;
-    }
-    showToast('Transacción registrada ✓', 'success');
-    quickAddForm.reset();
-    const firstBtn = $$('#type-toggle .type-toggle-btn')[0];
-    if (firstBtn) {
-      $$('#type-toggle .type-toggle-btn').forEach(b => b.classList.remove('active'));
-      firstBtn.classList.add('active');
+    const name     = $('tx-name')?.value.trim();
+    const amount   = parseFloat($('tx-amount')?.value);
+    const accountId  = $('tx-account')?.value;
+    const categoryId = $('tx-category')?.value;
+    const typeBtn  = document.querySelector('#type-toggle .type-toggle-btn.active');
+    const type     = typeBtn?.dataset.type || 'debit';
+
+    if (!name) { showToast('Escribe una descripción', 'error'); return; }
+    if (!amount || amount <= 0) { showToast('Escribe un monto válido', 'error'); return; }
+    if (!accountId) { showToast('Selecciona una cuenta', 'error'); return; }
+
+    try {
+      await API.createTransaction({
+        description: name,
+        amount: Math.round(amount * 100),
+        account_id: accountId,
+        category_id: categoryId || null,
+        type,
+        source: 'manual'
+      });
+      showToast('Transacción registrada ✓', 'success');
+      quickAddForm.reset();
+      loadTransactions();
+    } catch (err) {
+      showToast('Error: ' + err.message, 'error');
     }
   });
 
@@ -225,5 +238,82 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   renderBudgetPeriod();
+// ============================================================
+  // 9. CARGAR DATOS INICIALES
+  // ============================================================
+  async function loadCategories() {
+    try {
+      const cats = await API.getCategories();
+      const selects = ['tx-category', 'modal-tx-category'];
+      selects.forEach(id => {
+        const sel = $(id);
+        if (!sel) return;
+        sel.innerHTML = '<option value="">Categoría (opcional)</option>';
+        cats.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.id;
+          opt.textContent = `${c.icon} ${c.name}`;
+          sel.appendChild(opt);
+        });
+      });
+    } catch (e) {
+      console.error('Error cargando categorías:', e);
+    }
+  }
 
+  async function loadAccounts() {
+    try {
+      const accounts = await API.getAccounts();
+      const selects = ['tx-account', 'modal-tx-account'];
+      selects.forEach(id => {
+        const sel = $(id);
+        if (!sel) return;
+        sel.innerHTML = '<option value="">Seleccionar cuenta</option>';
+        accounts.forEach(a => {
+          const opt = document.createElement('option');
+          opt.value = a.id;
+          opt.textContent = `${a.icon || '🏦'} ${a.name}`;
+          sel.appendChild(opt);
+        });
+      });
+    } catch (e) {
+      console.error('Error cargando cuentas:', e);
+    }
+  }
+
+  async function loadTransactions() {
+    try {
+      const txs = await API.getTransactions(10);
+      const list = $('tx-list');
+      if (!list) return;
+      if (txs.length === 0) {
+        list.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">📭</div>
+            <div class="empty-title">Sin movimientos</div>
+            <div class="empty-desc">Registra tu primera transacción arriba</div>
+          </div>`;
+        return;
+      }
+      list.innerHTML = txs.map(tx => `
+        <div class="tx-item">
+          <div class="tx-icon">${tx.category?.icon || '💸'}</div>
+          <div class="tx-info">
+            <div class="tx-name">${tx.description}</div>
+            <div class="tx-meta">${tx.account?.name || ''} · ${tx.date}</div>
+          </div>
+          <div class="tx-amount ${tx.type === 'credit' ? 'income' : 'expense'}">
+            ${tx.type === 'credit' ? '+' : '-'}$${(tx.amount/100).toLocaleString('es-CO')}
+          </div>
+        </div>
+      `).join('');
+    } catch (e) {
+      console.error('Error cargando transacciones:', e);
+    }
+  }
+
+  // Inicializar
+  loadCategories();
+  loadAccounts();
+  loadTransactions();
 });
