@@ -2,13 +2,19 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
+const ws = require('ws');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
+  process.env.SUPABASE_ANON_KEY,
+  {
+    realtime: {
+      transport: ws
+    }
+  }
 );
 
 app.use(cors());
@@ -20,5 +26,5 @@ app.get('/api/health', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`FinTrack server running on http://localhost:${PORT}`);
+  console.log(`FinTrack server corriendo en http://localhost:${PORT}`);
 });
