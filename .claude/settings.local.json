@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "Bash(node -e ' *)",
+      "Bash(node --check server.js)",
+      "Bash(node --check public/js/api.js)",
+      "Bash(node --check public/js/app.js)"
     ]
   }
 }

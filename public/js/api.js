@@ -26,8 +26,19 @@ const API = (() => {
     getCategories:  ()       => request('GET',    '/categories'),
 
     // TRANSACCIONES
-    getTransactions: (limit) => request('GET',    `/transactions?limit=${limit || 20}`),
-    createTransaction: (data)=> request('POST',   '/transactions', data),
-    deleteTransaction: (id)  => request('DELETE', `/transactions/${id}`),
+    getTransactions:   (limit) => request('GET',    `/transactions?limit=${limit || 20}`),
+    getAllTransactions: ()      => request('GET',    '/transactions/all'),
+    createTransaction: (data)  => request('POST',   '/transactions', data),
+    deleteTransaction: (id)    => request('DELETE', `/transactions/${id}`),
+
+    // DASHBOARD & BALANCES
+    getDashboard:      ()       => request('GET', '/dashboard'),
+    getAccountBalance: (id)     => request('GET', `/accounts/${id}/balance`),
+
+    // RESUMEN
+    getResumen: (month) => request('GET', `/resumen${month ? '?month=' + month : ''}`),
+
+    // ASIENTOS CONTABLES
+    createJournalEntries: (data) => request('POST', '/journal-entries', data),
   };
 })();
