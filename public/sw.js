@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fintrack-v1';
+const CACHE_NAME = 'fintrack-v2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -28,6 +28,12 @@ self.addEventListener('activate', event => {
 
 self.addEventListener('fetch', event => {
   const { request } = event;
+
+  // En desarrollo: siempre red, nunca cache
+  if (request.url.includes('localhost')) {
+    event.respondWith(fetch(request));
+    return;
+  }
 
   // Peticiones a la API siempre van a la red
   if (request.url.includes('/api/')) {
