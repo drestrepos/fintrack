@@ -1,4 +1,23 @@
 // FinTrack — app.js
+
+// ============================================================
+// AUTH HELPERS (must be outside DOMContentLoaded so api.js
+// 401 handler can call reload before DOM is ready)
+// ============================================================
+function getStoredToken() { return localStorage.getItem('fintrack-token'); }
+function getStoredUser()  {
+  try { return JSON.parse(localStorage.getItem('fintrack-user') || 'null'); } catch { return null; }
+}
+function storeAuth(token, user) {
+  if (token) {
+    localStorage.setItem('fintrack-token', token);
+    localStorage.setItem('fintrack-user', JSON.stringify(user || {}));
+  } else {
+    localStorage.removeItem('fintrack-token');
+    localStorage.removeItem('fintrack-user');
+  }
+}
+
 document.addEventListener('DOMContentLoaded', function () {
   'use strict';
 
@@ -77,7 +96,28 @@ document.addEventListener('DOMContentLoaded', function () {
     return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
   }
 
-  // Estado global de caché
+  // ============================================================
+  // AUTH SCREEN CONTROL
+  // ============================================================
+  const authScreen = $('auth-screen');
+  const appDiv     = $('app');
+
+  function showApp() {
+    if (authScreen) authScreen.classList.add('hidden');
+    if (appDiv)     appDiv.style.display = '';
+    // Update email display in Config
+    const user = getStoredUser();
+    const emailEl = $('config-user-email');
+    if (emailEl && user?.email) emailEl.textContent = user.email;
+  }
+  function showAuth() {
+    if (authScreen) authScreen.classList.remove('hidden');
+    if (appDiv)     appDiv.style.display = 'none';
+  }
+
+  // ============================================================
+  // ESTADO GLOBAL DE CACHÉ
+  // ============================================================
   let _cachedAccounts   = [];
   let _cachedCategories = [];
   let _txCache          = null;
@@ -1292,7 +1332,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
       try {
         showToast('Exportando...', 'info');
-        const res = await fetch(`/api/export?from=${from}&to=${to}`);
+        const token = API.getToken();
+        const res = await fetch(`/api/export?from=${from}&to=${to}`, {
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        });
         if (!res.ok) {
           const err = await res.json().catch(() => ({ error: 'Error desconocido' }));
           throw new Error(err.error || 'Error exportando');
@@ -1315,19 +1358,121 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // ============================================================
+  // AUTH SCREEN INTERACTIONS
+  // ============================================================
+  function initAuthScreen() {
+    const loginForm    = $('auth-login-form');
+    const registerForm = $('auth-register-form');
+    const authTabs     = $$('.auth-tab');
+
+    authTabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        authTabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        const form = tab.dataset.form;
+        if (loginForm)    loginForm.style.display    = form === 'login'    ? '' : 'none';
+        if (registerForm) registerForm.style.display = form === 'register' ? '' : 'none';
+        $('login-error')    && ($('login-error').textContent    = '');
+        $('register-error') && ($('register-error').textContent = '');
+      });
+    });
+
+    loginForm?.addEventListener('submit', async e => {
+      e.preventDefault();
+      const email    = $('login-email')?.value.trim();
+      const password = $('login-password')?.value;
+      const errEl    = $('login-error');
+      if (errEl) { errEl.style.color = ''; errEl.textContent = ''; }
+      const btn = loginForm.querySelector('.auth-submit-btn');
+      if (btn) { btn.textContent = 'Entrando…'; btn.disabled = true; }
+      try {
+        const res = await API.login({ email, password });
+        storeAuth(res.session?.access_token, res.user);
+        showApp();
+        navigateTo('home');
+        loadDashboard(); loadCategories(); loadAccounts(); loadTransactions();
+      } catch (err) {
+        if (errEl) errEl.textContent = err.message;
+      } finally {
+        if (btn) { btn.textContent = 'Entrar'; btn.disabled = false; }
+      }
+    });
+
+    registerForm?.addEventListener('submit', async e => {
+      e.preventDefault();
+      const name     = $('register-name')?.value.trim();
+      const email    = $('register-email')?.value.trim();
+      const password = $('register-password')?.value;
+      const confirm  = $('register-confirm')?.value;
+      const errEl    = $('register-error');
+      if (errEl) { errEl.style.color = ''; errEl.textContent = ''; }
+      if (password !== confirm) { if (errEl) errEl.textContent = 'Las contraseñas no coinciden'; return; }
+      if (password.length < 6)  { if (errEl) errEl.textContent = 'Mínimo 6 caracteres'; return; }
+      const btn = registerForm.querySelector('.auth-submit-btn');
+      if (btn) { btn.textContent = 'Creando…'; btn.disabled = true; }
+      try {
+        const res = await API.register({ email, password, name });
+        if (res.session?.access_token) {
+          storeAuth(res.session.access_token, res.user);
+          showApp();
+          navigateTo('home');
+          loadDashboard(); loadCategories(); loadAccounts(); loadTransactions();
+        } else {
+          // Email confirmation required
+          if (errEl) { errEl.style.color = 'var(--income)'; errEl.textContent = 'Cuenta creada. Revisa tu email para confirmar.'; }
+        }
+      } catch (err) {
+        if (errEl) errEl.textContent = err.message;
+      } finally {
+        if (btn) { btn.textContent = 'Crear cuenta'; btn.disabled = false; }
+      }
+    });
+
+    $('btn-forgot-password')?.addEventListener('click', async () => {
+      const email = $('login-email')?.value.trim();
+      const errEl = $('login-error');
+      if (!email) { if (errEl) errEl.textContent = 'Escribe tu email primero'; return; }
+      try {
+        await API.resetPassword({ email });
+        if (errEl) { errEl.style.color = 'var(--income)'; errEl.textContent = 'Email de recuperación enviado ✓'; }
+      } catch (err) {
+        if (errEl) errEl.textContent = err.message;
+      }
+    });
+
+    $('btn-logout')?.addEventListener('click', async () => {
+      try { await API.logout(); } catch {}
+      storeAuth(null, null);
+      _cachedAccounts = []; _cachedCategories = []; _txCache = null;
+      showAuth();
+      // Reset register form visibility
+      if (loginForm)    loginForm.style.display    = '';
+      if (registerForm) registerForm.style.display = 'none';
+      authTabs.forEach((t, i) => t.classList.toggle('active', i === 0));
+    });
+  }
+
+  // ============================================================
   // INIT
   // ============================================================
   $('btn-add-category')?.addEventListener('click', () =>
     showToast('Próximamente: agregar categorías', 'info')
   );
 
-  navigateTo('home');
-  loadDashboard();
-  loadCategories();
-  loadAccounts();
-  loadTransactions();
   initAddAccountModal();
   initAddBudgetModal();
   initTxActions();
   initExportModal();
+  initAuthScreen();
+
+  if (getStoredToken()) {
+    showApp();
+    navigateTo('home');
+    loadDashboard();
+    loadCategories();
+    loadAccounts();
+    loadTransactions();
+  } else {
+    showAuth();
+  }
 });

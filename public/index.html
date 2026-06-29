@@ -961,10 +961,154 @@
       color-scheme: dark;
     }
     [data-theme="light"] input[type="date"].field-input { color-scheme: light; }
+
+    /* ============================================================
+       AUTH SCREEN
+    ============================================================ */
+    #auth-screen {
+      position: fixed; inset: 0;
+      background: var(--bg);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 24px; z-index: 900;
+      overflow-y: auto;
+    }
+    #auth-screen.hidden { display: none; }
+
+    #auth-logo {
+      text-align: center; margin-bottom: 28px;
+    }
+    #auth-icon {
+      width: 72px; height: 72px; border-radius: 20px;
+      margin-bottom: 10px; display: block; margin-left: auto; margin-right: auto;
+    }
+    #auth-logo h1 {
+      font-size: 26px; font-weight: 700; color: var(--accent); letter-spacing: -.5px;
+    }
+    #auth-logo p {
+      font-size: 13px; color: var(--text-muted); margin-top: 4px;
+    }
+
+    #auth-card {
+      width: 100%; max-width: 380px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+
+    #auth-tabs {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 4px;
+      background: var(--surface2);
+      border-radius: var(--radius-sm);
+      padding: 4px; margin-bottom: 20px;
+    }
+    .auth-tab {
+      padding: 9px 4px; border-radius: 7px;
+      font-size: 14px; font-weight: 600;
+      color: var(--text-muted);
+      transition: all var(--t);
+      background: none; border: none; cursor: pointer;
+      font-family: var(--font);
+    }
+    .auth-tab.active {
+      background: var(--surface);
+      color: var(--text);
+      box-shadow: 0 1px 4px rgba(0,0,0,.2);
+    }
+
+    .auth-submit-btn {
+      width: 100%;
+      background: var(--accent); color: #0d0f14;
+      font-family: var(--font); font-size: 15px; font-weight: 700;
+      padding: 13px; border-radius: var(--radius-sm);
+      border: none; cursor: pointer; margin-top: 4px;
+      transition: opacity var(--t);
+    }
+    .auth-submit-btn:disabled { opacity: .6; cursor: not-allowed; }
+
+    .auth-error {
+      font-size: 13px; color: var(--expense);
+      min-height: 18px; text-align: center;
+      margin-bottom: 10px; margin-top: -4px;
+    }
+
+    .auth-link {
+      display: block; width: 100%; text-align: center;
+      font-size: 13px; color: var(--accent);
+      margin-top: 12px; padding: 6px;
+      background: none; border: none; cursor: pointer;
+      font-family: var(--font);
+    }
+
+    #auth-login-form .field,
+    #auth-register-form .field { margin-bottom: 10px; }
   </style>
 </head>
 <body>
-<div id="app">
+<!-- ======================================================
+     AUTH SCREEN
+====================================================== -->
+<div id="auth-screen">
+  <div id="auth-logo">
+    <img src="/icons/icon-192.png" alt="FinTrack" id="auth-icon">
+    <h1>FinTrack</h1>
+    <p>Tus finanzas, bajo control</p>
+  </div>
+
+  <div id="auth-card">
+    <div id="auth-tabs">
+      <button type="button" class="auth-tab active" data-form="login">Iniciar sesión</button>
+      <button type="button" class="auth-tab" data-form="register">Registrarse</button>
+    </div>
+
+    <!-- Login form -->
+    <form id="auth-login-form" autocomplete="on">
+      <div class="field">
+        <div class="field-inner">
+          <input type="email" id="login-email" class="field-input" placeholder="Correo electrónico" autocomplete="email" required>
+        </div>
+      </div>
+      <div class="field">
+        <div class="field-inner">
+          <input type="password" id="login-password" class="field-input" placeholder="Contraseña" autocomplete="current-password" required>
+        </div>
+      </div>
+      <div id="login-error" class="auth-error"></div>
+      <button type="submit" class="auth-submit-btn">Entrar</button>
+      <button type="button" id="btn-forgot-password" class="auth-link">¿Olvidaste tu contraseña?</button>
+    </form>
+
+    <!-- Register form -->
+    <form id="auth-register-form" autocomplete="on" style="display:none">
+      <div class="field">
+        <div class="field-inner">
+          <input type="text" id="register-name" class="field-input" placeholder="Nombre" autocomplete="name">
+        </div>
+      </div>
+      <div class="field">
+        <div class="field-inner">
+          <input type="email" id="register-email" class="field-input" placeholder="Correo electrónico" autocomplete="email" required>
+        </div>
+      </div>
+      <div class="field">
+        <div class="field-inner">
+          <input type="password" id="register-password" class="field-input" placeholder="Contraseña (mín. 6 caracteres)" autocomplete="new-password" required>
+        </div>
+      </div>
+      <div class="field">
+        <div class="field-inner">
+          <input type="password" id="register-confirm" class="field-input" placeholder="Confirmar contraseña" autocomplete="new-password" required>
+        </div>
+      </div>
+      <div id="register-error" class="auth-error"></div>
+      <button type="submit" class="auth-submit-btn">Crear cuenta</button>
+    </form>
+  </div>
+</div>
+
+<div id="app" style="display:none">
 
   <!-- ======================================================
        HEADER
@@ -1274,7 +1418,7 @@
       <div class="card" style="text-align:center;padding:20px 16px;margin-bottom:12px;">
         <div style="font-size:48px;margin-bottom:8px;">👤</div>
         <div style="font-size:16px;font-weight:700;">Mi cuenta</div>
-        <div style="font-size:13px;color:var(--text-muted);margin-top:4px;">drestrepo@premier.pr</div>
+        <div id="config-user-email" style="font-size:13px;color:var(--text-muted);margin-top:4px;">—</div>
       </div>
 
       <div class="config-section">
@@ -1325,6 +1469,16 @@
           <span class="config-icon">ℹ️</span>
           <div class="config-info"><div class="config-label">Versión</div></div>
           <span class="config-val">1.0.0-beta</span>
+        </div>
+      </div>
+
+      <div class="config-section">
+        <div class="config-section-title">Sesión</div>
+        <div class="config-item" id="btn-logout" style="cursor:pointer;">
+          <span class="config-icon">🚪</span>
+          <div class="config-info">
+            <div class="config-label" style="color:var(--warn);">Cerrar sesión</div>
+          </div>
         </div>
       </div>
 

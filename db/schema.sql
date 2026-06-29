@@ -93,3 +93,25 @@ INSERT INTO settings (key, value) VALUES
   ('theme',       'dark'),
   ('language',    'es'),
   ('date_format', 'DD/MM/YYYY');
+
+-- ============================================================
+-- MIGRACIÓN — Supabase Auth (ejecutar en SQL Editor de Supabase)
+-- ============================================================
+
+-- 1. Agregar columna user_id a las tablas de datos del usuario
+ALTER TABLE accounts        ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id);
+ALTER TABLE transactions    ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id);
+ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id);
+ALTER TABLE budgets         ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id);
+
+-- 2. Actualizar constraint UNIQUE de budgets para incluir user_id
+--    (dos usuarios distintos pueden presupuestar la misma categoría en el mismo mes)
+ALTER TABLE budgets DROP CONSTRAINT IF EXISTS budgets_category_id_month_key;
+ALTER TABLE budgets ADD CONSTRAINT budgets_user_category_month_key
+  UNIQUE (user_id, category_id, month);
+
+-- 3. Índices para rendimiento
+CREATE INDEX IF NOT EXISTS idx_accounts_user        ON accounts(user_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_user    ON transactions(user_id);
+CREATE INDEX IF NOT EXISTS idx_journal_entries_user ON journal_entries(user_id);
+CREATE INDEX IF NOT EXISTS idx_budgets_user         ON budgets(user_id);
