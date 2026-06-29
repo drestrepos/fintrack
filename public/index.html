@@ -274,7 +274,8 @@
       font-size: 14px; font-weight: 600;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    .tx-meta { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
+    .tx-meta  { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
+    .tx-notes { font-size: 11px; color: var(--text-muted); font-style: italic; margin-top: 2px; }
     .tx-amount { font-family: var(--mono); font-size: 14px; font-weight: 600; flex-shrink: 0; }
     .tx-amount.income   { color: var(--income); }
     .tx-amount.expense  { color: var(--expense); }
@@ -486,6 +487,58 @@
       color: var(--text);
     }
 
+    /* Resumen — balance card */
+    #resumen-balance-card {
+      background: linear-gradient(135deg, var(--surface) 0%, var(--surface2) 100%);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px; margin-bottom: 16px;
+      position: relative; overflow: hidden;
+    }
+    #resumen-balance-card::before {
+      content: '';
+      position: absolute; top: -50px; right: -50px;
+      width: 150px; height: 150px;
+      background: var(--accent-dim);
+      border-radius: 50%;
+    }
+    .rbc-label {
+      font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: .8px;
+      color: var(--text-muted); margin-bottom: 4px;
+      position: relative;
+    }
+    .rbc-total {
+      font-family: var(--mono);
+      font-size: 28px; font-weight: 600; letter-spacing: -1px;
+      margin-bottom: 16px; position: relative;
+    }
+    .rbc-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 8px; position: relative;
+    }
+    .rbc-grid .rbc-item:nth-child(1) { grid-column: 1 / 3; grid-row: 1; }
+    .rbc-grid .rbc-item:nth-child(2) { grid-column: 3 / 5; grid-row: 1; }
+    .rbc-grid .rbc-item:nth-child(3) { grid-column: 5 / 7; grid-row: 1; }
+    .rbc-grid .rbc-item:nth-child(4) { grid-column: 2 / 4; grid-row: 2; }
+    .rbc-grid .rbc-item:nth-child(5) { grid-column: 4 / 6; grid-row: 2; }
+    .rbc-item {
+      display: flex; flex-direction: column; align-items: center;
+      background: rgba(0,0,0,.15);
+      border-radius: var(--radius-sm);
+      padding: 10px 4px; text-align: center;
+    }
+    [data-theme="light"] .rbc-item { background: rgba(0,0,0,.05); }
+    .rbc-icon { font-size: 16px; margin-bottom: 3px; }
+    .rbc-lbl {
+      font-size: 9px; color: var(--text-muted); font-weight: 600;
+      text-transform: uppercase; letter-spacing: .4px; margin-bottom: 4px;
+    }
+    .rbc-val { font-family: var(--mono); font-size: 12px; font-weight: 700; }
+    .rbc-val.pos { color: var(--income); }
+    .rbc-val.neg { color: var(--expense); }
+
     .resumen-cat-empty {
       padding: 20px; text-align: center;
       font-size: 13px; color: var(--text-muted);
@@ -586,9 +639,16 @@
     }
     .budget-cat-icon { font-size: 20px; }
     .budget-cat-info { flex: 1; }
-    .budget-cat-name { font-size: 14px; font-weight: 600; }
+    .budget-cat-name { font-size: 14px; font-weight: 600; flex: 1; }
     .budget-cat-amounts { font-size: 12px; color: var(--text-muted); font-family: var(--mono); margin-top: 2px; }
     .budget-cat-pct { font-family: var(--mono); font-size: 13px; font-weight: 700; }
+    .budget-bar-wrap { height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; margin-bottom: 8px; }
+    .budget-bar { height: 100%; border-radius: 3px; transition: width .5s cubic-bezier(.4,0,.2,1); min-width: 2px; }
+    .budget-bar.ok   { background: var(--income); }
+    .budget-bar.warn { background: #f59e0b; }
+    .budget-bar.over { background: var(--expense); }
+    .budget-cat-footer { display: flex; justify-content: space-between; font-size: 11px; font-family: var(--mono); color: var(--text-muted); }
+    .budget-limit.expense { color: var(--expense); }
 
     /* ============================================================
        VIEW: CONFIG
@@ -725,6 +785,99 @@
     .balance-fail { color: var(--expense); font-weight: 600; }
 
     /* ============================================================
+       MODALES GENÉRICOS (agregar cuenta / presupuesto)
+    ============================================================ */
+    .modal-overlay-bg {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.7);
+      z-index: 200;
+      display: none; align-items: flex-end; justify-content: center;
+      backdrop-filter: blur(4px);
+    }
+    .modal-overlay-bg.open { display: flex; }
+    .modal-sheet {
+      background: var(--surface);
+      border-radius: var(--radius) var(--radius) 0 0;
+      width: 100%; max-width: 480px;
+      max-height: 85vh; overflow-y: auto; scrollbar-width: none;
+      animation: slideUp .25s cubic-bezier(.4,0,.2,1);
+    }
+    .modal-sheet::-webkit-scrollbar { display: none; }
+
+    /* Icon picker */
+    .icon-picker { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+    .icon-opt {
+      width: 42px; height: 42px; border-radius: var(--radius-sm);
+      border: 2px solid var(--border);
+      font-size: 20px; display: flex; align-items: center; justify-content: center;
+      background: var(--surface2); transition: all var(--t);
+    }
+    .icon-opt.active { border-color: var(--accent); background: var(--accent-dim); }
+
+    /* Delete button on tx items */
+    .tx-group-item { position: relative; overflow: hidden; }
+    .tx-del-btn {
+      position: absolute; right: 0; top: 0; bottom: 0;
+      width: 80px; background: var(--expense);
+      color: #fff; font-size: 11px; font-weight: 700;
+      display: none; align-items: center; justify-content: center;
+      flex-direction: column; gap: 2px;
+      border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
+    }
+    .tx-group-item.has-del-btn .tx-del-btn { display: flex; }
+    .tx-group-item.has-del-btn { padding-right: 80px; }
+
+    /* ··· button */
+    .more-btn {
+      padding: 4px 10px; font-size: 20px; letter-spacing: 1px;
+      color: var(--text-muted); flex-shrink: 0; border-radius: var(--radius-sm);
+    }
+    .more-btn:active { color: var(--text); background: var(--surface2); }
+
+    /* Action sheet (··· menus) */
+    .action-sheet-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.6); z-index: 400;
+      display: none; align-items: flex-end; justify-content: center;
+      backdrop-filter: blur(2px);
+    }
+    .action-sheet-overlay.open { display: flex; }
+    .action-sheet {
+      background: var(--surface);
+      border-radius: var(--radius) var(--radius) 0 0;
+      width: 100%; max-width: 480px;
+      overflow: hidden;
+      animation: slideUp .2s cubic-bezier(.4,0,.2,1);
+      padding-bottom: env(safe-area-inset-bottom, 4px);
+    }
+    .action-sheet-title {
+      font-size: 12px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .8px; color: var(--text-muted);
+      padding: 16px 20px 8px; text-align: center;
+    }
+    .action-item {
+      display: block; width: 100%;
+      padding: 15px 20px; text-align: left;
+      font-size: 16px; color: var(--text);
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .action-item:active { background: var(--surface2); }
+    .action-item.danger { color: var(--expense); }
+    .action-sheet-cancel {
+      display: block; width: 100%;
+      padding: 15px 20px; text-align: center;
+      font-size: 16px; font-weight: 600; color: var(--text-muted);
+      border-top: 6px solid var(--surface2);
+      background: var(--surface);
+    }
+    .action-sheet-cancel:active { background: var(--surface2); }
+
+    /* Edit sheet */
+    .edit-sheet-body { padding: 0 16px; }
+    .edit-sheet-footer { padding: 12px 16px 4px; }
+
+    /* ============================================================
        TOAST
     ============================================================ */
     #toast-container {
@@ -745,6 +898,7 @@
     }
     .toast.success { border-left: 3px solid var(--income); }
     .toast.error   { border-left: 3px solid var(--expense); }
+    .toast.info    { border-left: 3px solid var(--accent); }
     @keyframes toastIn {
       from { opacity: 0; transform: translateY(-10px); }
       to   { opacity: 1; transform: translateY(0); }
@@ -810,14 +964,14 @@
         <span class="form-label">Nueva Transacción</span>
 
         <div class="type-toggle" id="type-toggle">
-          <button type="button" class="type-toggle-btn active" data-type="credit">+ Ingreso</button>
-          <button type="button" class="type-toggle-btn" data-type="debit">− Gasto</button>
+          <button type="button" class="type-toggle-btn active" data-type="debit">− Gasto</button>
+          <button type="button" class="type-toggle-btn" data-type="credit">+ Ingreso</button>
         </div>
 
         <div class="field">
           <div class="field-inner">
             <span class="field-icon">✏️</span>
-            <input type="text" id="tx-name" class="field-input" placeholder="Descripción" autocomplete="off" />
+            <input type="text" id="tx-name" class="field-input" placeholder="Nombre de la transacción" autocomplete="off" />
           </div>
         </div>
 
@@ -843,6 +997,13 @@
             <select id="tx-category" class="field-input">
               <option value="">Categoría (opc.)</option>
             </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-inner">
+            <span class="field-icon">📝</span>
+            <input type="text" id="tx-notes" class="field-input" placeholder="Notas (opcional)" autocomplete="off" />
           </div>
         </div>
 
@@ -889,8 +1050,6 @@
         <button type="button" class="chip active" data-filter="all">Todos</button>
         <button type="button" class="chip" data-filter="income">Ingresos</button>
         <button type="button" class="chip chip-warn" data-filter="expense">Gastos</button>
-        <button type="button" class="chip" data-filter="transfer">Transferencias</button>
-        <button type="button" class="chip" data-filter="date">📅 Fecha</button>
       </div>
 
       <div id="tx-list-full">
@@ -951,9 +1110,45 @@
         </div>
       </div>
 
+      <!-- Balance card -->
+      <div id="resumen-balance-card">
+        <div class="rbc-label">Patrimonio Total</div>
+        <div class="rbc-total" id="resumen-balance-total">$0</div>
+        <div class="rbc-grid">
+          <div class="rbc-item">
+            <div class="rbc-icon">🏦</div>
+            <div class="rbc-lbl">Bancos</div>
+            <div class="rbc-val pos" id="resumen-bal-banks">$0</div>
+          </div>
+          <div class="rbc-item">
+            <div class="rbc-icon">💰</div>
+            <div class="rbc-lbl">Billeteras</div>
+            <div class="rbc-val pos" id="resumen-bal-wallets">$0</div>
+          </div>
+          <div class="rbc-item">
+            <div class="rbc-icon">💵</div>
+            <div class="rbc-lbl">Efectivo</div>
+            <div class="rbc-val pos" id="resumen-bal-cash">$0</div>
+          </div>
+          <div class="rbc-item">
+            <div class="rbc-icon">💳</div>
+            <div class="rbc-lbl">Crédito</div>
+            <div class="rbc-val pos" id="resumen-bal-credit">$0</div>
+          </div>
+          <div class="rbc-item">
+            <div class="rbc-icon">👤</div>
+            <div class="rbc-lbl">Personas</div>
+            <div class="rbc-val pos" id="resumen-bal-persons">$0</div>
+          </div>
+        </div>
+      </div>
+
       <!-- Cuentas -->
       <div class="section-header">
-        <span class="section-title">Cuentas</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="section-title">Mis Cuentas</span>
+          <button type="button" class="period-btn" id="btn-add-account" title="Nueva cuenta">＋</button>
+        </div>
         <span class="resumen-net" id="resumen-net-total">$0</span>
       </div>
 
@@ -965,15 +1160,12 @@
         </div>
       </div>
 
-      <!-- Personas -->
-      <div class="section-header" style="margin-top:20px;" id="resumen-persons-header">
-        <span class="section-title">Personas</span>
-      </div>
-      <div id="resumen-persons-list"></div>
-
       <!-- Categorías del mes -->
       <div class="section-header" style="margin-top:20px;">
-        <span class="section-title">Por categoría</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="section-title">Por categoría</span>
+          <button type="button" class="period-btn" id="btn-add-category" title="Nueva categoría">＋</button>
+        </div>
       </div>
 
       <div id="resumen-categories-list">
@@ -1018,65 +1210,7 @@
       </div>
 
       <div id="budget-categories">
-        <div class="budget-cat">
-          <div class="budget-cat-header">
-            <span class="budget-cat-icon">🛒</span>
-            <div class="budget-cat-info">
-              <div class="budget-cat-name">Alimentación</div>
-              <div class="budget-cat-amounts">$320 / $500</div>
-            </div>
-            <div class="budget-cat-pct" style="color:var(--income)">64%</div>
-          </div>
-          <div class="progress-bar"><div class="progress-fill ok" style="width:64%"></div></div>
-        </div>
-
-        <div class="budget-cat">
-          <div class="budget-cat-header">
-            <span class="budget-cat-icon">🚌</span>
-            <div class="budget-cat-info">
-              <div class="budget-cat-name">Transporte</div>
-              <div class="budget-cat-amounts">$180 / $200</div>
-            </div>
-            <div class="budget-cat-pct" style="color:#f59e0b">90%</div>
-          </div>
-          <div class="progress-bar"><div class="progress-fill warn" style="width:90%"></div></div>
-        </div>
-
-        <div class="budget-cat">
-          <div class="budget-cat-header">
-            <span class="budget-cat-icon">🏠</span>
-            <div class="budget-cat-info">
-              <div class="budget-cat-name">Vivienda</div>
-              <div class="budget-cat-amounts">$850 / $800</div>
-            </div>
-            <div class="budget-cat-pct" style="color:var(--expense)">106%</div>
-          </div>
-          <div class="progress-bar"><div class="progress-fill over" style="width:100%"></div></div>
-        </div>
-
-        <div class="budget-cat">
-          <div class="budget-cat-header">
-            <span class="budget-cat-icon">🎮</span>
-            <div class="budget-cat-info">
-              <div class="budget-cat-name">Entretenimiento</div>
-              <div class="budget-cat-amounts">$45 / $150</div>
-            </div>
-            <div class="budget-cat-pct" style="color:var(--income)">30%</div>
-          </div>
-          <div class="progress-bar"><div class="progress-fill ok" style="width:30%"></div></div>
-        </div>
-
-        <div class="budget-cat">
-          <div class="budget-cat-header">
-            <span class="budget-cat-icon">💊</span>
-            <div class="budget-cat-info">
-              <div class="budget-cat-name">Salud</div>
-              <div class="budget-cat-amounts">$60 / $100</div>
-            </div>
-            <div class="budget-cat-pct" style="color:var(--income)">60%</div>
-          </div>
-          <div class="progress-bar"><div class="progress-fill ok" style="width:60%"></div></div>
-        </div>
+        <!-- JS popula dinámicamente -->
       </div>
 
     </section>
@@ -1234,16 +1368,15 @@
     </div>
     <div class="modal-body">
 
-      <div class="type-toggle" id="modal-type-toggle" style="grid-template-columns:1fr 1fr 1fr;">
-        <button type="button" class="type-toggle-btn active" data-type="credit">+ Ingreso</button>
-        <button type="button" class="type-toggle-btn" data-type="debit">− Gasto</button>
-        <button type="button" class="type-toggle-btn" data-type="transfer">⇄ Transfer.</button>
+      <div class="type-toggle" id="modal-type-toggle">
+        <button type="button" class="type-toggle-btn active" data-type="debit">− Gasto</button>
+        <button type="button" class="type-toggle-btn" data-type="credit">+ Ingreso</button>
       </div>
 
       <div class="field">
         <div class="field-inner">
           <span class="field-icon">✏️</span>
-          <input type="text" id="modal-tx-name" class="field-input" placeholder="Descripción" autocomplete="off" />
+          <input type="text" id="modal-tx-name" class="field-input" placeholder="Nombre de la transacción" autocomplete="off" />
         </div>
       </div>
 
@@ -1305,6 +1438,108 @@
       <button type="button" class="btn-primary" id="modal-submit">Guardar transacción</button>
       <div style="height:16px;"></div>
     </div>
+  </div>
+</div>
+
+<!-- ======================================================
+     MODAL: AGREGAR CUENTA
+====================================================== -->
+<div class="modal-overlay-bg" id="modal-add-account-overlay">
+  <div class="modal-sheet" role="dialog" aria-label="Nueva cuenta">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <span class="modal-title">Nueva cuenta</span>
+      <button type="button" class="modal-close" id="add-account-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field"><div class="field-inner">
+        <span class="field-icon">✏️</span>
+        <input type="text" id="add-account-name" class="field-input" placeholder="Nombre de la cuenta" autocomplete="off">
+      </div></div>
+      <div class="field"><div class="field-inner">
+        <span class="field-icon">📂</span>
+        <select id="add-account-type" class="field-input">
+          <option value="bank">🏦 Banco</option>
+          <option value="wallet">💰 Billetera</option>
+          <option value="cash">💵 Efectivo</option>
+          <option value="credit">💳 Crédito</option>
+          <option value="person">👤 Persona</option>
+        </select>
+      </div></div>
+      <div class="modal-section-lbl">Ícono</div>
+      <div class="icon-picker" id="add-account-icon-picker">
+        <button type="button" class="icon-opt active" data-icon="🏦">🏦</button>
+        <button type="button" class="icon-opt" data-icon="💰">💰</button>
+        <button type="button" class="icon-opt" data-icon="💳">💳</button>
+        <button type="button" class="icon-opt" data-icon="💵">💵</button>
+        <button type="button" class="icon-opt" data-icon="👤">👤</button>
+        <button type="button" class="icon-opt" data-icon="📱">📱</button>
+        <button type="button" class="icon-opt" data-icon="🔴">🔴</button>
+        <button type="button" class="icon-opt" data-icon="💜">💜</button>
+        <button type="button" class="icon-opt" data-icon="🏠">🏠</button>
+        <button type="button" class="icon-opt" data-icon="🚗">🚗</button>
+      </div>
+      <div id="add-account-balance-wrap">
+        <div class="field"><div class="field-inner">
+          <span class="field-icon">$</span>
+          <input type="number" id="add-account-balance" class="field-input mono" placeholder="Saldo inicial (opcional)" inputmode="decimal" min="0" step="1000">
+        </div></div>
+      </div>
+      <button type="button" class="btn-primary" id="add-account-submit">Crear cuenta</button>
+      <div style="height:16px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================
+     MODAL: AGREGAR PRESUPUESTO
+====================================================== -->
+<div class="modal-overlay-bg" id="modal-add-budget-overlay">
+  <div class="modal-sheet" role="dialog" aria-label="Nuevo presupuesto">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <span class="modal-title">Nuevo presupuesto</span>
+      <button type="button" class="modal-close" id="add-budget-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field"><div class="field-inner">
+        <span class="field-icon">🏷️</span>
+        <select id="add-budget-category" class="field-input">
+          <option value="">Categoría...</option>
+        </select>
+      </div></div>
+      <div class="field"><div class="field-inner">
+        <span class="field-icon">$</span>
+        <input type="number" id="add-budget-amount" class="field-input mono" placeholder="Límite mensual en pesos" inputmode="decimal" min="0" step="1000">
+      </div></div>
+      <button type="button" class="btn-primary" id="add-budget-submit">Guardar presupuesto</button>
+      <div style="height:16px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================
+     ACTION SHEET — menú ··· genérico
+====================================================== -->
+<div class="action-sheet-overlay" id="action-sheet-overlay">
+  <div class="action-sheet">
+    <div class="action-sheet-title" id="action-sheet-title"></div>
+    <div id="action-sheet-body"></div>
+    <button type="button" class="action-sheet-cancel" id="action-sheet-cancel">Cancelar</button>
+  </div>
+</div>
+
+<!-- ======================================================
+     EDIT SHEET — formulario de edición genérico
+====================================================== -->
+<div class="action-sheet-overlay" id="edit-sheet-overlay">
+  <div class="action-sheet">
+    <div class="action-sheet-title" id="edit-sheet-title">Editar</div>
+    <div class="edit-sheet-body" id="edit-sheet-body"></div>
+    <div class="edit-sheet-footer">
+      <button type="button" class="btn-primary" id="edit-sheet-submit">Guardar</button>
+    </div>
+    <button type="button" class="action-sheet-cancel" id="edit-sheet-cancel">Cancelar</button>
   </div>
 </div>
 

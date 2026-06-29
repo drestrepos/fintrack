@@ -19,16 +19,21 @@ const API = (() => {
 
   return {
     // CUENTAS
-    getAccounts:    ()       => request('GET',    '/accounts'),
-    createAccount:  (data)   => request('POST',   '/accounts', data),
+    getAccounts:    ()         => request('GET',    '/accounts'),
+    createAccount:  (data)     => request('POST',   '/accounts', data),
+    updateAccount:  (id, data) => request('PATCH',  `/accounts/${id}`, data),
+    deleteAccount:  (id)       => request('DELETE', `/accounts/${id}`),
 
     // CATEGORÍAS
-    getCategories:  ()       => request('GET',    '/categories'),
+    getCategories:   ()         => request('GET',    '/categories'),
+    updateCategory:  (id, data) => request('PATCH',  `/categories/${id}`, data),
+    deleteCategory:  (id)       => request('DELETE', `/categories/${id}`),
 
     // TRANSACCIONES
     getTransactions:   (limit) => request('GET',    `/transactions?limit=${limit || 20}`),
     getAllTransactions: ()      => request('GET',    '/transactions/all'),
     createTransaction: (data)  => request('POST',   '/transactions', data),
+    updateTransaction: (id, data) => request('PATCH', `/transactions/${id}`, data),
     deleteTransaction: (id)    => request('DELETE', `/transactions/${id}`),
 
     // DASHBOARD & BALANCES
@@ -40,5 +45,12 @@ const API = (() => {
 
     // ASIENTOS CONTABLES
     createJournalEntries: (data) => request('POST', '/journal-entries', data),
+
+    // PRESUPUESTOS
+    getBudgets:   (month)       => request('GET',    `/budgets${month ? '?month=' + month : ''}`),
+    createBudget: (data)        => request('POST',   '/budgets', data),
+    updateBudget: (id, data)    => request('PATCH',  `/budgets/${id}`, data),
+    deleteBudget: (id)          => request('DELETE', `/budgets/${id}`),
+    copyBudgets:  (from, to)    => request('GET',    `/budgets/copy?from=${from}&to=${to}`),
   };
 })();

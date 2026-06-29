@@ -60,6 +60,28 @@ document.addEventListener('DOMContentLoaded', function () {
     return `${year}-${String(month + 1).padStart(2, '0')}`;
   }
 
+  function formatDateShort(dateStr) {
+    if (!dateStr) return '';
+    const [y, m, d] = dateStr.split('-');
+    return `${d}/${m}/${y}`;
+  }
+
+  function formatDateTime(isoString) {
+    if (!isoString) return '';
+    const dt   = new Date(isoString);
+    const dd   = String(dt.getDate()).padStart(2, '0');
+    const mm   = String(dt.getMonth() + 1).padStart(2, '0');
+    const yyyy = dt.getFullYear();
+    const hh   = String(dt.getHours()).padStart(2, '0');
+    const min  = String(dt.getMinutes()).padStart(2, '0');
+    return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+  }
+
+  // Estado global de caché
+  let _cachedAccounts   = [];
+  let _cachedCategories = [];
+  let _txCache          = null;
+
   // ============================================================
   // 1. TEMA
   // ============================================================
@@ -94,6 +116,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     if (viewName === 'transactions') loadAllTransactions();
     if (viewName === 'resumen')      loadResumen();
+    if (viewName === 'budget')       loadBudget();
   }
 
   $$('#nav-tabs .nav-tab').forEach(tab => tab.addEventListener('click', () => navigateTo(tab.dataset.view)));
@@ -125,7 +148,6 @@ document.addEventListener('DOMContentLoaded', function () {
   // ============================================================
   // 4. PARTIDA DOBLE — PANEL COLAPSABLE (quick-add + modal)
   // ============================================================
-  let _cachedAccounts = [];
 
   function makeDeAccountOptions() {
     return `<option value="">Cuenta…</option>` +
@@ -258,6 +280,7 @@ document.addEventListener('DOMContentLoaded', function () {
           category_id: payload.category_id,
           type:        entry.entry_type,
           date:        payload.date,
+          notes:       payload.notes || null,
         });
 
         // Journal entry vinculado a la transacción principal
@@ -309,6 +332,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function openModal() {
     if (!modalOverlay) return;
+    populateAccountSelects();
+    populateCategorySelects();
     modalOverlay.classList.add('open');
     const df = $('modal-tx-date');
     if (df && !df.value) df.value = today();
@@ -378,6 +403,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const amount    = parseFloat($('tx-amount')?.value);
     const accountId = $('tx-account')?.value;
     const catId     = $('tx-category')?.value;
+    const notes     = $('tx-notes')?.value.trim() || null;
     const type      = getActiveType('type-toggle');
 
     if (!name)            { showToast('Escribe una descripción', 'error'); return; }
@@ -399,7 +425,7 @@ document.addEventListener('DOMContentLoaded', function () {
       const { hasPD } = await executeSave({
         description: name, amount: amountCentavos,
         account_id: accountId, category_id: catId || null,
-        type, date: today(),
+        type, date: today(), notes,
       }, deEntries);
 
       showToast(hasPD ? 'Transacción y partida doble guardadas ✓' : 'Transacción registrada ✓', 'success');
@@ -417,7 +443,178 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   // ============================================================
-  // 7. FILTER CHIPS (Movimientos)
+  // 7. ACTION SHEET + EDIT SHEET (genéricos)
+  // ============================================================
+  const EDIT_ICONS = ['🏦','💰','💳','💵','👤','📱','🔴','💜','🏠','🚗',
+                      '🛒','🍕','🚗','✈️','💊','📚','🎮','🏠','💡','🎁'];
+
+  function iconPickerHtml(selectedIcon) {
+    return `<div class="icon-picker">` +
+      EDIT_ICONS.map(ic =>
+        `<button type="button" class="icon-opt${ic === selectedIcon ? ' active' : ''}" data-icon="${ic}">${ic}</button>`
+      ).join('') + `</div>`;
+  }
+
+  function openActionSheet(title, options) {
+    const overlay = $('action-sheet-overlay');
+    const titleEl = $('action-sheet-title');
+    const bodyEl  = $('action-sheet-body');
+    if (!overlay) return;
+    titleEl.textContent = title;
+    bodyEl.innerHTML = '';
+    options.forEach(opt => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'action-item' + (opt.danger ? ' danger' : '');
+      btn.textContent = opt.label;
+      btn.addEventListener('click', () => { closeActionSheet(); opt.handler(); });
+      bodyEl.appendChild(btn);
+    });
+    overlay.classList.add('open');
+  }
+
+  function closeActionSheet() { $('action-sheet-overlay')?.classList.remove('open'); }
+
+  $('action-sheet-cancel')?.addEventListener('click', closeActionSheet);
+  $('action-sheet-overlay')?.addEventListener('click', e => {
+    if (e.target === $('action-sheet-overlay')) closeActionSheet();
+  });
+
+  let _editSheetOnSave = null;
+
+  function openEditSheet(title, bodyHTML, onSave) {
+    const overlay = $('edit-sheet-overlay');
+    if (!overlay) return;
+    $('edit-sheet-title').textContent = title;
+    const bodyEl = $('edit-sheet-body');
+    bodyEl.innerHTML = bodyHTML;
+    bodyEl.querySelectorAll('.icon-opt').forEach(opt => {
+      opt.addEventListener('click', () => {
+        bodyEl.querySelectorAll('.icon-opt').forEach(o => o.classList.remove('active'));
+        opt.classList.add('active');
+      });
+    });
+    _editSheetOnSave = onSave;
+    overlay.classList.add('open');
+    // Focus first text input
+    setTimeout(() => bodyEl.querySelector('input')?.focus(), 100);
+  }
+
+  function closeEditSheet() { $('edit-sheet-overlay')?.classList.remove('open'); }
+
+  $('edit-sheet-cancel')?.addEventListener('click', closeEditSheet);
+  $('edit-sheet-overlay')?.addEventListener('click', e => {
+    if (e.target === $('edit-sheet-overlay')) closeEditSheet();
+  });
+  $('edit-sheet-submit')?.addEventListener('click', async () => {
+    if (_editSheetOnSave) await _editSheetOnSave();
+  });
+
+  // Generic confirm-delete helper (opens nested action sheet)
+  function confirmDelete(label, onConfirm) {
+    openActionSheet('¿Confirmar eliminación?', [
+      { label: `🗑️ ${label}`, danger: true, handler: async () => {
+        try { await onConfirm(); }
+        catch (err) { showToast(err.message, 'error'); }
+      }},
+    ]);
+  }
+
+  // Edit helpers per entity type
+  function openEditAccount(id, currentName, currentIcon, currentType) {
+    const typeOpts = [
+      ['bank',   '🏦 Banco'],
+      ['wallet', '💰 Billetera'],
+      ['cash',   '💵 Efectivo'],
+      ['credit', '💳 Crédito'],
+      ['person', '👤 Persona'],
+    ].map(([v, lbl]) =>
+      `<option value="${v}"${v === currentType ? ' selected' : ''}>${lbl}</option>`
+    ).join('');
+
+    openEditSheet('Editar cuenta', `
+      <div class="field" style="margin-bottom:10px;"><div class="field-inner">
+        <input type="text" id="es-name" class="field-input" value="${escHtml(currentName)}" placeholder="Nombre">
+      </div></div>
+      <div class="field" style="margin-bottom:10px;"><div class="field-inner">
+        <span class="field-icon">📂</span>
+        <select id="es-type" class="field-input">${typeOpts}</select>
+      </div></div>
+      <div class="modal-section-lbl">Ícono</div>
+      ${iconPickerHtml(currentIcon)}`, async () => {
+      const newName = $('es-name')?.value.trim();
+      const newType = $('es-type')?.value || currentType;
+      const newIcon = $('edit-sheet-body')?.querySelector('.icon-opt.active')?.dataset.icon || currentIcon;
+      if (!newName) { showToast('Escribe un nombre', 'error'); return; }
+      try {
+        await API.updateAccount(id, { name: newName, icon: newIcon, type: newType });
+        showToast('Cuenta actualizada ✓', 'success');
+        closeEditSheet();
+        await refreshAccounts();
+        loadResumen();
+      } catch (err) { showToast('Error: ' + err.message, 'error'); }
+    });
+  }
+
+  function openEditCategory(id, currentName, currentIcon) {
+    openEditSheet('Editar categoría', `
+      <div class="field" style="margin-bottom:10px;"><div class="field-inner">
+        <input type="text" id="es-name" class="field-input" value="${escHtml(currentName)}" placeholder="Nombre">
+      </div></div>
+      <div class="modal-section-lbl">Ícono</div>
+      ${iconPickerHtml(currentIcon)}`, async () => {
+      const newName = $('es-name')?.value.trim();
+      const newIcon = $('edit-sheet-body')?.querySelector('.icon-opt.active')?.dataset.icon || currentIcon;
+      if (!newName) { showToast('Escribe un nombre', 'error'); return; }
+      try {
+        await API.updateCategory(id, { name: newName, icon: newIcon });
+        showToast('Categoría actualizada ✓', 'success');
+        closeEditSheet();
+        loadCategories();
+        loadResumen();
+      } catch (err) { showToast('Error: ' + err.message, 'error'); }
+    });
+  }
+
+  function openEditTransaction(txId, currentDesc) {
+    openEditSheet('Editar descripción', `
+      <div class="field" style="margin-bottom:10px;"><div class="field-inner">
+        <input type="text" id="es-name" class="field-input" value="${escHtml(currentDesc)}" placeholder="Descripción">
+      </div></div>`, async () => {
+      const newDesc = $('es-name')?.value.trim();
+      if (!newDesc) { showToast('Escribe una descripción', 'error'); return; }
+      try {
+        await API.updateTransaction(txId, { description: newDesc });
+        showToast('Descripción actualizada ✓', 'success');
+        closeEditSheet();
+        invalidateTxCache();
+        loadAllTransactions();
+        loadTransactions();
+      } catch (err) { showToast('Error: ' + err.message, 'error'); }
+    });
+  }
+
+  function openEditBudget(id, currentAmountCentavos) {
+    openEditSheet('Editar presupuesto', `
+      <div class="field" style="margin-bottom:10px;"><div class="field-inner">
+        <span class="field-icon">$</span>
+        <input type="number" id="es-amount" class="field-input mono"
+          value="${Math.round(currentAmountCentavos / 100)}"
+          placeholder="Monto en pesos" inputmode="decimal" min="0" step="1000">
+      </div></div>`, async () => {
+      const pesos = parseFloat($('es-amount')?.value || '0');
+      if (pesos <= 0) { showToast('Escribe un monto válido', 'error'); return; }
+      try {
+        await API.updateBudget(id, { amount: Math.round(pesos * 100) });
+        showToast('Presupuesto actualizado ✓', 'success');
+        closeEditSheet();
+        loadBudget();
+      } catch (err) { showToast('Error: ' + err.message, 'error'); }
+    });
+  }
+
+  // ============================================================
+  // 8. FILTER CHIPS (Movimientos)
   // ============================================================
   let _currentFilter = 'all';
 
@@ -483,12 +680,35 @@ document.addEventListener('DOMContentLoaded', function () {
   async function loadResumen() {
     try {
       const data = await API.getResumen(monthKey(resumenYear, resumenMonth));
-      renderResumenAccounts(data.accounts, data.net_total);
-      renderResumenPersons(data.persons || []);
+      renderResumenBalanceCard(data);
+      const allAccounts = [...(data.accounts || []), ...(data.persons || [])];
+      renderResumenAccounts(allAccounts, data.net_total);
       renderResumenCategories(data.categories);
     } catch (e) {
       console.error('Error cargando resumen:', e);
     }
+  }
+
+  function renderResumenBalanceCard(data) {
+    const totalEl = $('resumen-balance-total');
+    if (totalEl) totalEl.textContent = formatCOP(data.net_total || 0);
+
+    const typeMap = {
+      'resumen-bal-banks':   { val: data.balance_banks   || 0, isCredit: false },
+      'resumen-bal-wallets': { val: data.balance_wallets || 0, isCredit: false },
+      'resumen-bal-cash':    { val: data.balance_cash    || 0, isCredit: false },
+      'resumen-bal-credit':  { val: data.balance_credit  || 0, isCredit: true  },
+      'resumen-bal-persons': { val: data.balance_persons || 0, isCredit: false },
+    };
+    Object.entries(typeMap).forEach(([id, { val, isCredit }]) => {
+      const el = $(id);
+      if (!el) return;
+      el.textContent = formatCOP(val);
+      // Credit: positive balance = owed money → red; else green
+      // Others: negative → red, zero/positive → green
+      const isNeg = isCredit ? val > 0 : val < 0;
+      el.className = 'rbc-val ' + (isNeg ? 'neg' : 'pos');
+    });
   }
 
   function renderResumenAccounts(accounts, netTotal) {
@@ -513,39 +733,37 @@ document.addEventListener('DOMContentLoaded', function () {
           <div class="account-type">${meta.label}</div>
         </div>
         <div class="account-balance${neg}">${formatCOP(a.balance)}</div>
+        <button type="button" class="more-btn"
+          data-acctid="${a.id}"
+          data-acctname="${escHtml(a.name)}"
+          data-accticon="${escHtml(a.icon || meta.emoji)}"
+          data-accttype="${a.type}"
+          aria-label="Opciones">···</button>
       </div>`;
     }).join('');
 
     if (netEl) netEl.textContent = formatCOP(netTotal || 0);
-  }
 
-  function renderResumenPersons(persons) {
-    const header = $('resumen-persons-header');
-    const list   = $('resumen-persons-list');
-    if (!list) return;
-
-    if (!persons.length) {
-      if (header) header.style.display = 'none';
-      list.style.display = 'none';
-      return;
-    }
-
-    if (header) header.style.display = '';
-    list.style.display = '';
-
-    list.innerHTML = persons.map(p => {
-      const neg    = p.balance < 0;
-      const cls    = neg ? 'expense' : 'income';
-      const label  = neg ? 'Les debo' : 'Me debe';
-      return `<div class="account-card">
-        <div class="account-icon ai-invest">${escHtml(p.icon || '👤')}</div>
-        <div class="account-info">
-          <div class="account-name">${escHtml(p.name)}</div>
-          <div class="account-type">${label}</div>
-        </div>
-        <div class="account-balance ${cls}">${formatCOP(Math.abs(p.balance))}</div>
-      </div>`;
-    }).join('');
+    list.querySelectorAll('.more-btn[data-acctid]').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const id   = btn.dataset.acctid;
+        const name = btn.dataset.acctname;
+        const icon = btn.dataset.accticon;
+        const type = btn.dataset.accttype;
+        openActionSheet(name, [
+          { label: '✏️ Editar', handler: () => openEditAccount(id, name, icon, type) },
+          { label: '🗑️ Eliminar cuenta', danger: true, handler: () =>
+            confirmDelete('Eliminar cuenta', async () => {
+              await API.deleteAccount(id);
+              showToast('Cuenta eliminada', 'success');
+              await refreshAccounts();
+              loadResumen();
+            })
+          },
+        ]);
+      });
+    });
   }
 
   function renderResumenCategories(categories) {
@@ -581,7 +799,7 @@ document.addEventListener('DOMContentLoaded', function () {
       const total = $('balance-total');
       const inc   = $('balance-income');
       const exp   = $('balance-expenses');
-      if (total) total.textContent = formatCOP(d.balance);
+      if (total) total.textContent = formatCOP(d.total);
       if (inc)   inc.textContent   = formatCOP(d.monthly_income);
       if (exp)   exp.textContent   = formatCOP(d.monthly_expenses);
     } catch (e) { console.error('Error cargando dashboard:', e); }
@@ -590,44 +808,53 @@ document.addEventListener('DOMContentLoaded', function () {
   // ============================================================
   // 11. CATEGORÍAS (selects)
   // ============================================================
+
+  function populateCategorySelects() {
+    ['tx-category', 'modal-tx-category'].forEach(id => {
+      const sel = $(id); if (!sel) return;
+      sel.innerHTML = '<option value="">Categoría (opcional)</option>';
+      _cachedCategories.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = `${c.icon || ''} ${c.name}`;
+        sel.appendChild(opt);
+      });
+    });
+  }
+
   async function loadCategories() {
     try {
       const cats = await API.getCategories();
-      ['tx-category', 'modal-tx-category'].forEach(id => {
-        const sel = $(id); if (!sel) return;
-        sel.innerHTML = '<option value="">Categoría (opcional)</option>';
-        cats.forEach(c => {
-          const opt = document.createElement('option');
-          opt.value = c.id;
-          opt.textContent = `${c.icon || ''} ${c.name}`;
-          sel.appendChild(opt);
-        });
-      });
+      _cachedCategories = cats;
+      populateCategorySelects();
     } catch (e) { console.error('Error cargando categorías:', e); }
   }
 
   // ============================================================
   // 12. CUENTAS — selects + caché para de-panel
   // ============================================================
-  async function loadAccounts() {
+  function populateAccountSelects() {
+    ['tx-account', 'modal-tx-account'].forEach(id => {
+      const sel = $(id); if (!sel) return;
+      sel.innerHTML = '<option value="">Seleccionar cuenta</option>';
+      _cachedAccounts.forEach(a => {
+        const opt = document.createElement('option');
+        opt.value = a.id;
+        opt.textContent = `${a.icon || '🏦'} ${a.name}`;
+        sel.appendChild(opt);
+      });
+    });
+  }
+
+  async function refreshAccounts() {
     try {
       const accounts = await API.getAccounts();
-      _cachedAccounts = accounts; // caché completa para de-panel (incluye persons)
-
-      const bankAccounts = accounts.filter(a => a.type !== 'person');
-
-      ['tx-account', 'modal-tx-account'].forEach(id => {
-        const sel = $(id); if (!sel) return;
-        sel.innerHTML = '<option value="">Seleccionar cuenta</option>';
-        bankAccounts.forEach(a => {
-          const opt = document.createElement('option');
-          opt.value = a.id;
-          opt.textContent = `${a.icon || '🏦'} ${a.name}`;
-          sel.appendChild(opt);
-        });
-      });
+      _cachedAccounts = accounts;
+      populateAccountSelects();
     } catch (e) { console.error('Error cargando cuentas:', e); }
   }
+
+  async function loadAccounts() { return refreshAccounts(); }
 
   // ============================================================
   // 13. TRANSACCIONES RECIENTES (home)
@@ -665,7 +892,6 @@ document.addEventListener('DOMContentLoaded', function () {
   // ============================================================
   // 14. TODOS LOS MOVIMIENTOS (vista Movimientos)
   // ============================================================
-  let _txCache = null;
   function invalidateTxCache() { _txCache = null; }
 
   async function loadAllTransactions() {
@@ -675,7 +901,7 @@ document.addEventListener('DOMContentLoaded', function () {
       let txs = _txCache;
       if (_currentFilter === 'income')   txs = txs.filter(t => t.type === 'credit');
       if (_currentFilter === 'expense')  txs = txs.filter(t => t.type === 'debit');
-      if (_currentFilter === 'transfer') txs = txs.filter(t => t.type === 'transfer');
+      if (_currentFilter === 'transfer') txs = txs.filter(t => t.description.includes('(PD '));
 
       const list = $('tx-list-full');
       if (!list) return;
@@ -694,15 +920,20 @@ document.addEventListener('DOMContentLoaded', function () {
 
       list.innerHTML = Object.entries(groups).map(([date, items]) => {
         const rows = items.map(tx => {
-          const sign = tx.type === 'credit' ? '+' : (tx.type === 'debit' ? '−' : '');
-          const cls  = tx.type === 'credit' ? 'income' : (tx.type === 'transfer' ? 'transfer' : 'expense');
-          return `<div class="tx-group-item">
+          const sign = tx.type === 'credit' ? '+' : '−';
+          const cls  = tx.type === 'credit' ? 'income' : 'expense';
+          return `<div class="tx-group-item" data-txid="${tx.id}" data-txdesc="${escHtml(tx.description)}">
             <div class="tx-icon">${tx.category?.icon || '💸'}</div>
             <div class="tx-info">
               <div class="tx-name">${escHtml(tx.description)}</div>
-              <div class="tx-meta">${tx.account?.name || ''}${tx.category ? ' · ' + escHtml(tx.category.name) : ''}</div>
+              <div class="tx-meta">${tx.account?.name || ''}${tx.category ? ' · ' + escHtml(tx.category.name) : ''} · ${formatDateTime(tx.created_at)}</div>
+              ${tx.notes ? `<div class="tx-notes">${escHtml(tx.notes)}</div>` : ''}
             </div>
             <div class="tx-amount ${cls}">${sign}${formatCOP(tx.amount)}</div>
+            <button type="button" class="more-btn"
+              data-txid="${tx.id}"
+              data-txdesc="${escHtml(tx.description)}"
+              aria-label="Opciones">···</button>
           </div>`;
         }).join('');
         return `<div class="tx-group">
@@ -712,11 +943,290 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // ============================================================
+  // 15. ACCIONES EN TRANSACCIONES (··· menú)
+  // ============================================================
+  function initTxActions() {
+    const list = $('tx-list-full');
+    if (!list) return;
+
+    list.addEventListener('click', e => {
+      const btn = e.target.closest('.more-btn[data-txid]');
+      if (!btn) return;
+      const txId   = btn.dataset.txid;
+      const txDesc = btn.dataset.txdesc;
+      openActionSheet(txDesc, [
+        { label: '✏️ Editar descripción', handler: () => openEditTransaction(txId, txDesc) },
+        { label: '🗑️ Eliminar', danger: true, handler: () =>
+          confirmDelete('Eliminar transacción', async () => {
+            // Delete PD secondary transactions linked to this one
+            const pdPrefix = txDesc + ' (PD ';
+            const pdTxs = (_txCache || []).filter(t => t.description.startsWith(pdPrefix));
+            await API.deleteTransaction(txId);
+            for (const pt of pdTxs) {
+              await API.deleteTransaction(pt.id);
+            }
+            invalidateTxCache();
+            loadDashboard();
+            loadTransactions();
+            loadAllTransactions();
+            showToast('Transacción eliminada', 'success');
+          })
+        },
+      ]);
+    });
+  }
+
+  // ============================================================
+  // 16. PRESUPUESTO — carga y renderizado
+  // ============================================================
+  async function loadBudget() {
+    renderBudgetPeriod();
+    try {
+      const budgets = await API.getBudgets(monthKey(budgetYear, budgetMonth));
+      renderBudgetView(budgets);
+    } catch (e) {
+      console.error('Error cargando presupuesto:', e);
+      showToast('Error cargando presupuesto', 'error');
+    }
+  }
+
+  function renderBudgetView(budgets) {
+    const container = $('budget-categories');
+    if (!container) return;
+
+    const totalBudgeted = budgets.reduce((s, b) => s + b.amount, 0);
+    const totalSpent    = budgets.reduce((s, b) => s + b.spent,  0);
+    const totalLeft     = totalBudgeted - totalSpent;
+
+    // Update existing stat elements in the HTML header
+    const elBudget    = $('budget-total-budget');
+    const elSpent     = $('budget-total-spent');
+    const elRemaining = $('budget-total-remaining');
+    const elBar       = $('budget-total-bar');
+    if (elBudget)    elBudget.textContent    = formatCOP(totalBudgeted);
+    if (elSpent)     elSpent.textContent     = formatCOP(totalSpent);
+    if (elRemaining) elRemaining.textContent = formatCOP(Math.abs(totalLeft));
+    if (elRemaining) elRemaining.className   = 'bstat-val ' + (totalLeft < 0 ? 'bstat-red' : 'bstat-green');
+    if (elBar && totalBudgeted > 0) {
+      const barPct = Math.min(Math.round(totalSpent / totalBudgeted * 100), 100);
+      elBar.style.width = barPct + '%';
+      elBar.className = 'progress-fill ' + (barPct >= 100 ? 'over' : barPct >= 80 ? 'warn' : 'ok');
+    }
+
+    if (!budgets.length) {
+      container.innerHTML = `<div class="empty-state">
+        <div class="empty-icon">🎯</div>
+        <div class="empty-title">Sin presupuestos</div>
+        <div class="empty-desc">Agrega un presupuesto para este mes</div>
+      </div>`;
+    } else {
+      container.innerHTML = budgets.map(b => {
+        const pct  = b.amount > 0 ? Math.min(Math.round(b.spent / b.amount * 100), 100) : 0;
+        const over = b.spent > b.amount;
+        const warn = !over && pct >= 80;
+        const barCls = over ? 'over' : (warn ? 'warn' : 'ok');
+        const left = b.amount - b.spent;
+        return `<div class="budget-cat">
+          <div class="budget-cat-header">
+            <span class="budget-cat-icon">${b.category?.icon || '🏷️'}</span>
+            <span class="budget-cat-name">${escHtml(b.category?.name || '—')}</span>
+            <button type="button" class="more-btn"
+              data-budgetid="${b.id}"
+              data-budgetamt="${b.amount}"
+              data-budgetname="${escHtml(b.category?.name || '—')}"
+              aria-label="Opciones">···</button>
+          </div>
+          <div class="budget-bar-wrap">
+            <div class="budget-bar ${barCls}" style="width:${pct}%"></div>
+          </div>
+          <div class="budget-cat-footer">
+            <span class="budget-spent">${formatCOP(b.spent)} gastado</span>
+            <span class="budget-limit ${over ? 'expense' : ''}">${over ? '−' + formatCOP(Math.abs(left)) + ' excedido' : formatCOP(left) + ' restante'}</span>
+          </div>
+        </div>`;
+      }).join('');
+
+      // Wire ··· buttons
+      container.querySelectorAll('.more-btn[data-budgetid]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id   = btn.dataset.budgetid;
+          const amt  = parseInt(btn.dataset.budgetamt, 10);
+          const name = btn.dataset.budgetname;
+          openActionSheet(name, [
+            { label: '✏️ Editar monto', handler: () => openEditBudget(id, amt) },
+            { label: '🗑️ Eliminar presupuesto', danger: true, handler: () =>
+              confirmDelete('Eliminar presupuesto', async () => {
+                await API.deleteBudget(id);
+                showToast('Presupuesto eliminado', 'success');
+                loadBudget();
+              })
+            },
+          ]);
+        });
+      });
+    }
+
+    // "Agregar presupuesto" button
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'btn-primary';
+    addBtn.style.cssText = 'width:100%;margin-top:12px;';
+    addBtn.textContent = '+ Agregar presupuesto';
+    addBtn.addEventListener('click', () => openAddBudgetModal());
+    container.appendChild(addBtn);
+  }
+
+  // ============================================================
+  // 17. MODAL AGREGAR CUENTA
+  // ============================================================
+  function initAddAccountModal() {
+    const overlay  = $('modal-add-account-overlay');
+    const closeBtn = $('add-account-close');
+    const nameInp  = $('add-account-name');
+    const typeInp  = $('add-account-type');
+    const balWrap  = $('add-account-balance-wrap');
+    const balInp   = $('add-account-balance');
+    const iconPicker = $('add-account-icon-picker');
+    const submitBtn  = $('add-account-submit');
+
+    if (!overlay) return;
+
+    let selectedIcon = '🏦';
+
+    function openAddAccountModal() {
+      if (nameInp)  nameInp.value  = '';
+      if (balInp)   balInp.value   = '';
+      if (typeInp)  typeInp.value  = 'bank';
+      if (balWrap)  balWrap.style.display = '';
+      if (iconPicker) {
+        iconPicker.querySelectorAll('.icon-opt').forEach((el, i) => {
+          el.classList.toggle('active', i === 0);
+        });
+        selectedIcon = iconPicker.querySelector('.icon-opt')?.textContent || '🏦';
+      }
+      overlay.classList.add('open');
+    }
+
+    function closeAddAccountModal() {
+      overlay.classList.remove('open');
+    }
+
+    $('btn-add-account')?.addEventListener('click', openAddAccountModal);
+    closeBtn?.addEventListener('click', closeAddAccountModal);
+    overlay.addEventListener('click', e => { if (e.target === overlay) closeAddAccountModal(); });
+
+    // Show/hide balance field based on type
+    typeInp?.addEventListener('change', () => {
+      const t = typeInp.value;
+      if (balWrap) balWrap.style.display = (t === 'person') ? 'none' : '';
+    });
+
+    // Icon picker
+    iconPicker?.querySelectorAll('.icon-opt').forEach(opt => {
+      opt.addEventListener('click', () => {
+        iconPicker.querySelectorAll('.icon-opt').forEach(o => o.classList.remove('active'));
+        opt.classList.add('active');
+        selectedIcon = opt.textContent.trim();
+      });
+    });
+
+    submitBtn?.addEventListener('click', async () => {
+      const name = nameInp?.value.trim();
+      const type = typeInp?.value || 'bank';
+      const balPesos = parseFloat(balInp?.value || '0');
+
+      if (!name) { showToast('Escribe un nombre para la cuenta', 'error'); return; }
+
+      const balCentavos = Math.round(balPesos * 100);
+
+      try {
+        await API.createAccount({
+          name, type, icon: selectedIcon,
+          initial_balance: type === 'person' ? 0 : balCentavos,
+        });
+        showToast('Cuenta creada ✓', 'success');
+        closeAddAccountModal();
+        await refreshAccounts();
+        loadResumen();
+      } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+      }
+    });
+  }
+
+  // ============================================================
+  // 18. MODAL AGREGAR PRESUPUESTO
+  // ============================================================
+  function openAddBudgetModal() {
+    const overlay = $('modal-add-budget-overlay');
+    if (!overlay) return;
+
+    const catSel = $('add-budget-category');
+    const amtInp = $('add-budget-amount');
+
+    if (amtInp) amtInp.value = '';
+
+    // Populate categories not yet budgeted this month
+    if (catSel) {
+      catSel.innerHTML = '<option value="">Seleccionar categoría</option>';
+      _cachedCategories.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = `${c.icon || ''} ${c.name}`;
+        catSel.appendChild(opt);
+      });
+    }
+
+    overlay.classList.add('open');
+  }
+
+  function initAddBudgetModal() {
+    const overlay  = $('modal-add-budget-overlay');
+    const closeBtn = $('add-budget-close');
+    const submitBtn = $('add-budget-submit');
+
+    if (!overlay) return;
+
+    function closeModal() { overlay.classList.remove('open'); }
+
+    closeBtn?.addEventListener('click', closeModal);
+    overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+
+    submitBtn?.addEventListener('click', async () => {
+      const catId  = $('add-budget-category')?.value;
+      const amount = parseFloat($('add-budget-amount')?.value || '0');
+
+      if (!catId)         { showToast('Selecciona una categoría', 'error'); return; }
+      if (amount <= 0)    { showToast('Escribe un monto válido', 'error'); return; }
+
+      try {
+        await API.createBudget({
+          category_id: catId,
+          month: monthKey(budgetYear, budgetMonth),
+          amount: Math.round(amount * 100),
+        });
+        showToast('Presupuesto guardado ✓', 'success');
+        closeModal();
+        loadBudget();
+      } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+      }
+    });
+  }
+
+  // ============================================================
   // INIT
   // ============================================================
+  $('btn-add-category')?.addEventListener('click', () =>
+    showToast('Próximamente: agregar categorías', 'info')
+  );
+
   navigateTo('home');
   loadDashboard();
   loadCategories();
   loadAccounts();
   loadTransactions();
+  initAddAccountModal();
+  initAddBudgetModal();
+  initTxActions();
 });
