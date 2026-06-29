@@ -216,7 +216,13 @@ document.addEventListener('DOMContentLoaded', function () {
     toggle && toggle.addEventListener('click', () => {
       const open = cfg.panel.classList.toggle('open');
       toggle.classList.toggle('open', open);
-      if (!open) { cfg.rowsEl.innerHTML = ''; cfg.checkEl.style.display = 'none'; }
+      if (!open) {
+        cfg.rowsEl.innerHTML = '';
+        cfg.checkEl.style.display = 'none';
+      } else if (cfg.rowsEl.querySelectorAll('.entry-row').length === 0) {
+        cfg.rowsEl.appendChild(buildDeRow(cfg));
+        updateDePercent(cfg);
+      }
     });
 
     addLine && addLine.addEventListener('click', () => {
@@ -614,9 +620,11 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // ============================================================
-  // 8. FILTER CHIPS (Movimientos)
+  // 8. FILTER CHIPS + DROPDOWNS (Movimientos)
   // ============================================================
-  let _currentFilter = 'all';
+  let _currentFilter    = 'all';
+  let _filterAccountId  = '';
+  let _filterCategoryId = '';
 
   $$('#tx-filters .chip').forEach(chip => {
     chip.addEventListener('click', () => {
@@ -625,6 +633,18 @@ document.addEventListener('DOMContentLoaded', function () {
       _currentFilter = chip.dataset.filter;
       loadAllTransactions();
     });
+  });
+
+  $('filter-account')?.addEventListener('change', e => {
+    _filterAccountId = e.target.value;
+    e.target.classList.toggle('has-value', !!e.target.value);
+    loadAllTransactions();
+  });
+
+  $('filter-category')?.addEventListener('change', e => {
+    _filterCategoryId = e.target.value;
+    e.target.classList.toggle('has-value', !!e.target.value);
+    loadAllTransactions();
   });
 
   // ============================================================
@@ -810,15 +830,19 @@ document.addEventListener('DOMContentLoaded', function () {
   // ============================================================
 
   function populateCategorySelects() {
-    ['tx-category', 'modal-tx-category'].forEach(id => {
+    ['tx-category', 'modal-tx-category', 'filter-category'].forEach(id => {
       const sel = $(id); if (!sel) return;
-      sel.innerHTML = '<option value="">Categoría (opcional)</option>';
+      const isFilter = id === 'filter-category';
+      sel.innerHTML = isFilter
+        ? '<option value="">Todas las categorías</option>'
+        : '<option value="">Categoría (opcional)</option>';
       _cachedCategories.forEach(c => {
         const opt = document.createElement('option');
         opt.value = c.id;
         opt.textContent = `${c.icon || ''} ${c.name}`;
         sel.appendChild(opt);
       });
+      if (isFilter && _filterCategoryId) sel.value = _filterCategoryId;
     });
   }
 
@@ -834,15 +858,19 @@ document.addEventListener('DOMContentLoaded', function () {
   // 12. CUENTAS — selects + caché para de-panel
   // ============================================================
   function populateAccountSelects() {
-    ['tx-account', 'modal-tx-account'].forEach(id => {
+    ['tx-account', 'modal-tx-account', 'filter-account'].forEach(id => {
       const sel = $(id); if (!sel) return;
-      sel.innerHTML = '<option value="">Seleccionar cuenta</option>';
+      const isFilter = id === 'filter-account';
+      sel.innerHTML = isFilter
+        ? '<option value="">Todas las cuentas</option>'
+        : '<option value="">Seleccionar cuenta</option>';
       _cachedAccounts.forEach(a => {
         const opt = document.createElement('option');
         opt.value = a.id;
         opt.textContent = `${a.icon || '🏦'} ${a.name}`;
         sel.appendChild(opt);
       });
+      if (isFilter && _filterAccountId) sel.value = _filterAccountId;
     });
   }
 
@@ -902,6 +930,8 @@ document.addEventListener('DOMContentLoaded', function () {
       if (_currentFilter === 'income')   txs = txs.filter(t => t.type === 'credit');
       if (_currentFilter === 'expense')  txs = txs.filter(t => t.type === 'debit');
       if (_currentFilter === 'transfer') txs = txs.filter(t => t.description.includes('(PD '));
+      if (_filterAccountId)              txs = txs.filter(t => t.account_id  === _filterAccountId);
+      if (_filterCategoryId)             txs = txs.filter(t => t.category_id === _filterCategoryId);
 
       const list = $('tx-list-full');
       if (!list) return;

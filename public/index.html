@@ -440,6 +440,32 @@
       border-color: var(--expense); color: var(--expense);
     }
 
+    .filter-selects-row {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 8px; margin-bottom: 14px;
+    }
+    .filter-select {
+      padding: 6px 10px;
+      border-radius: 20px;
+      font-size: 12px; font-weight: 600;
+      font-family: var(--font);
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      -webkit-appearance: none; appearance: none;
+      cursor: pointer;
+      transition: all var(--t);
+      text-overflow: ellipsis;
+      overflow: hidden;
+      white-space: nowrap;
+      text-align: center;
+    }
+    .filter-select:focus { outline: none; border-color: var(--accent); }
+    .filter-select.has-value {
+      background: var(--accent-dim);
+      border-color: var(--accent); color: var(--accent);
+    }
+
     .tx-group {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -1068,6 +1094,15 @@
         <button type="button" class="chip active" data-filter="all">Todos</button>
         <button type="button" class="chip" data-filter="income">Ingresos</button>
         <button type="button" class="chip chip-warn" data-filter="expense">Gastos</button>
+      </div>
+
+      <div class="filter-selects-row">
+        <select id="filter-account" class="filter-select">
+          <option value="">Todas las cuentas</option>
+        </select>
+        <select id="filter-category" class="filter-select">
+          <option value="">Todas las categorías</option>
+        </select>
       </div>
 
       <div id="tx-list-full">
