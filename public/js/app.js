@@ -1215,6 +1215,76 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // ============================================================
+  // 19. MODAL EXPORTAR A EXCEL
+  // ============================================================
+  function initExportModal() {
+    const overlay   = $('modal-export');
+    const closeBtn  = $('export-close');
+    const fromInp   = $('export-from');
+    const toInp     = $('export-to');
+    const submitBtn = $('export-submit');
+
+    if (!overlay) return;
+
+    function todayStr() { return new Date().toISOString().slice(0, 10); }
+
+    function threeMonthsAgo() {
+      const d = new Date();
+      d.setMonth(d.getMonth() - 3);
+      return d.toISOString().slice(0, 10);
+    }
+
+    function openExportModal() {
+      const t = todayStr();
+      const m = threeMonthsAgo();
+      if (fromInp) { fromInp.max = t; fromInp.min = m; fromInp.value = m; }
+      if (toInp)   { toInp.max   = t; toInp.value   = t; }
+      overlay.classList.add('open');
+    }
+
+    function closeExportModal() { overlay.classList.remove('open'); }
+
+    $('btn-export')?.addEventListener('click', openExportModal);
+    closeBtn?.addEventListener('click', closeExportModal);
+    overlay.addEventListener('click', e => { if (e.target === overlay) closeExportModal(); });
+
+    submitBtn?.addEventListener('click', async () => {
+      const from = fromInp?.value;
+      const to   = toInp?.value;
+
+      if (!from || !to) { showToast('Selecciona las fechas', 'error'); return; }
+      if (from > to)    { showToast('La fecha inicio debe ser anterior al fin', 'error'); return; }
+
+      // Validate max 3-month range
+      const msRange = new Date(to) - new Date(from);
+      const days    = msRange / 86400000;
+      if (days > 93) { showToast('El rango máximo es 3 meses', 'error'); return; }
+
+      try {
+        showToast('Exportando...', 'info');
+        const res = await fetch(`/api/export?from=${from}&to=${to}`);
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: 'Error desconocido' }));
+          throw new Error(err.error || 'Error exportando');
+        }
+        const blob     = await res.blob();
+        const url      = URL.createObjectURL(blob);
+        const a        = document.createElement('a');
+        const fromStr  = from.replace(/-/g, '');
+        const toStr    = to.replace(/-/g, '');
+        a.href         = url;
+        a.download     = `fintrack_${fromStr}_${toStr}.xlsx`;
+        a.click();
+        URL.revokeObjectURL(url);
+        closeExportModal();
+        showToast('Excel descargado ✓', 'success');
+      } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+      }
+    });
+  }
+
+  // ============================================================
   // INIT
   // ============================================================
   $('btn-add-category')?.addEventListener('click', () =>
@@ -1229,4 +1299,5 @@ document.addEventListener('DOMContentLoaded', function () {
   initAddAccountModal();
   initAddBudgetModal();
   initTxActions();
+  initExportModal();
 });

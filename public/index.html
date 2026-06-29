@@ -917,6 +917,22 @@
       0%   { background-position: 200% 0; }
       100% { background-position: -200% 0; }
     }
+
+    /* Export modal date inputs */
+    .export-date-row {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+      margin-bottom: 16px;
+    }
+    .export-date-label {
+      font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: .6px;
+      color: var(--text-muted); margin-bottom: 6px;
+    }
+    input[type="date"].field-input {
+      -webkit-appearance: none; appearance: none;
+      color-scheme: dark;
+    }
+    [data-theme="light"] input[type="date"].field-input { color-scheme: light; }
   </style>
 </head>
 <body>
@@ -1242,10 +1258,8 @@
           <span class="config-icon">💱</span>
           <div class="config-info">
             <div class="config-label">Moneda</div>
-            <div class="config-desc">Moneda principal</div>
           </div>
-          <span class="config-val">USD</span>
-          <span class="chevron">›</span>
+          <span class="config-val">COP</span>
         </div>
         <div class="config-item">
           <span class="config-icon">🌐</span>
@@ -1253,41 +1267,16 @@
             <div class="config-label">Idioma</div>
           </div>
           <span class="config-val">Español</span>
-          <span class="chevron">›</span>
-        </div>
-        <div class="config-item">
-          <span class="config-icon">📅</span>
-          <div class="config-info">
-            <div class="config-label">Inicio de semana</div>
-          </div>
-          <span class="config-val">Lunes</span>
-          <span class="chevron">›</span>
         </div>
       </div>
 
       <div class="config-section">
         <div class="config-section-title">Datos</div>
-        <div class="config-item">
-          <span class="config-icon">🗂️</span>
-          <div class="config-info">
-            <div class="config-label">Categorías</div>
-            <div class="config-desc">Gestionar categorías</div>
-          </div>
-          <span class="chevron">›</span>
-        </div>
-        <div class="config-item">
+        <div class="config-item" id="btn-export" style="cursor:pointer;">
           <span class="config-icon">📤</span>
           <div class="config-info">
             <div class="config-label">Exportar datos</div>
-            <div class="config-desc">CSV / Excel</div>
-          </div>
-          <span class="chevron">›</span>
-        </div>
-        <div class="config-item">
-          <span class="config-icon">🔄</span>
-          <div class="config-info">
-            <div class="config-label">Sincronizar</div>
-            <div class="config-desc">Última sync: —</div>
+            <div class="config-desc">Descargar Excel con transacciones</div>
           </div>
           <span class="chevron">›</span>
         </div>
@@ -1513,6 +1502,40 @@
         <input type="number" id="add-budget-amount" class="field-input mono" placeholder="Límite mensual en pesos" inputmode="decimal" min="0" step="1000">
       </div></div>
       <button type="button" class="btn-primary" id="add-budget-submit">Guardar presupuesto</button>
+      <div style="height:16px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================
+     MODAL: EXPORTAR A EXCEL
+====================================================== -->
+<div class="modal-overlay-bg" id="modal-export">
+  <div class="modal-sheet" role="dialog" aria-label="Exportar transacciones">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <span class="modal-title">Exportar transacciones</span>
+      <button type="button" class="modal-close" id="export-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="export-date-row">
+        <div>
+          <div class="export-date-label">Desde</div>
+          <div class="field-inner">
+            <input type="date" id="export-from" class="field-input" />
+          </div>
+        </div>
+        <div>
+          <div class="export-date-label">Hasta</div>
+          <div class="field-inner">
+            <input type="date" id="export-to" class="field-input" />
+          </div>
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">
+        Rango máximo: 3 meses · Las transacciones internas (PD) se excluyen automáticamente.
+      </div>
+      <button type="button" class="btn-primary" id="export-submit">📥 Exportar Excel</button>
       <div style="height:16px;"></div>
     </div>
   </div>

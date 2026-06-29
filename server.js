@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors    = require('cors');
 const ws      = require('ws');
+const XLSX    = require('xlsx');
 const { createClient } = require('@supabase/supabase-js');
 
 const app  = express();
@@ -490,6 +491,64 @@ app.delete('/api/budgets/:id', async (req, res) => {
   const { error } = await supabase.from('budgets').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true });
+});
+
+// ============================================================
+// EXPORTAR A EXCEL
+// ============================================================
+app.get('/api/export', async (req, res) => {
+  const { from, to } = req.query;
+  if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+    return res.status(400).json({ error: 'Parámetros from y to requeridos (YYYY-MM-DD)' });
+  }
+  if (from > to) return res.status(400).json({ error: 'from debe ser anterior o igual a to' });
+
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('date, created_at, description, notes, type, amount, account:accounts(name), category:categories(name)')
+    .gte('date', from)
+    .lte('date', to)
+    .not('description', 'ilike', '%(PD%')
+    .order('date', { ascending: false })
+    .order('created_at', { ascending: false });
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  const rows = data.map(tx => {
+    const dt  = new Date(tx.created_at);
+    const hh  = String(dt.getHours()).padStart(2, '0');
+    const min = String(dt.getMinutes()).padStart(2, '0');
+    return {
+      'Fecha':       tx.date,
+      'Hora':        `${hh}:${min}`,
+      'Descripción': tx.description,
+      'Notas':       tx.notes || '',
+      'Tipo':        tx.type === 'credit' ? 'Ingreso' : 'Gasto',
+      'Monto':       Math.round(tx.amount / 100).toLocaleString('es-CO'),
+      'Cuenta':      tx.account?.name || '',
+      'Categoría':   tx.category?.name || '',
+    };
+  });
+
+  const wb  = XLSX.utils.book_new();
+  const ws2 = XLSX.utils.json_to_sheet(rows);
+
+  // Column widths
+  ws2['!cols'] = [
+    { wch: 12 }, { wch: 7 }, { wch: 30 }, { wch: 25 },
+    { wch: 9  }, { wch: 14 }, { wch: 20 }, { wch: 20 },
+  ];
+
+  XLSX.utils.book_append_sheet(wb, ws2, 'Transacciones');
+
+  const fromStr = from.replace(/-/g, '');
+  const toStr   = to.replace(/-/g, '');
+  const filename = `fintrack_${fromStr}_${toStr}.xlsx`;
+
+  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.send(buf);
 });
 
 // ============================================================
