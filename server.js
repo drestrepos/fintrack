@@ -74,7 +74,9 @@ app.post('/api/auth/logout', (req, res) => {
 app.post('/api/auth/reset-password', async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ error: 'Email requerido' });
-  const { error } = await supabase.auth.resetPasswordForEmail(email);
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: 'https://fintrack-production-06d5.up.railway.app',
+  });
   if (error) return res.status(400).json({ error: error.message });
   res.json({ success: true });
 });
@@ -98,9 +100,12 @@ app.post('/api/accounts', async (req, res) => {
   const uid = req.user.id;
   const { name, type, color, icon, initial_balance } = req.body;
   if (!name || !type) return res.status(400).json({ error: 'name y type son requeridos' });
+  // Credit accounts: initial_balance represents current debt, stored as negative
+  const rawBal = Math.round(initial_balance || 0);
+  const storedBalance = (type === 'credit' && rawBal > 0) ? -rawBal : rawBal;
   const { data, error } = await supabase
     .from('accounts')
-    .insert([{ user_id: uid, name, type, color, icon, initial_balance: initial_balance || 0 }])
+    .insert([{ user_id: uid, name, type, color, icon, initial_balance: storedBalance }])
     .select()
     .single();
   if (error) return res.status(500).json({ error: error.message });

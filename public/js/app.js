@@ -753,21 +753,27 @@ document.addEventListener('DOMContentLoaded', function () {
     const totalEl = $('resumen-balance-total');
     if (totalEl) totalEl.textContent = formatCOP(data.net_total || 0);
 
+    // credit: balance is negative (= debt). Show absolute value, always red.
+    // person: positive = te deben (green), negative = les debes (red). Show abs value.
+    // bank/wallet/cash: positive = asset (green), negative = overdraft (red). Show abs value.
     const typeMap = {
-      'resumen-bal-banks':   { val: data.balance_banks   || 0, isCredit: false },
-      'resumen-bal-wallets': { val: data.balance_wallets || 0, isCredit: false },
-      'resumen-bal-cash':    { val: data.balance_cash    || 0, isCredit: false },
-      'resumen-bal-credit':  { val: data.balance_credit  || 0, isCredit: true  },
-      'resumen-bal-persons': { val: data.balance_persons || 0, isCredit: false },
+      'resumen-bal-banks':   { val: data.balance_banks   || 0, mode: 'asset'  },
+      'resumen-bal-wallets': { val: data.balance_wallets || 0, mode: 'asset'  },
+      'resumen-bal-cash':    { val: data.balance_cash    || 0, mode: 'asset'  },
+      'resumen-bal-credit':  { val: data.balance_credit  || 0, mode: 'credit' },
+      'resumen-bal-persons': { val: data.balance_persons || 0, mode: 'person' },
     };
-    Object.entries(typeMap).forEach(([id, { val, isCredit }]) => {
+    Object.entries(typeMap).forEach(([id, { val, mode }]) => {
       const el = $(id);
       if (!el) return;
-      el.textContent = formatCOP(val);
-      // Credit: positive balance = owed money → red; else green
-      // Others: negative → red, zero/positive → green
-      const isNeg = isCredit ? val > 0 : val < 0;
-      el.className = 'rbc-val ' + (isNeg ? 'neg' : 'pos');
+      el.textContent = formatCOP(Math.abs(val));
+      let cls;
+      if (mode === 'credit') {
+        cls = 'neg'; // credit is always a liability
+      } else {
+        cls = val >= 0 ? 'pos' : 'neg';
+      }
+      el.className = 'rbc-val ' + cls;
     });
   }
 
@@ -785,14 +791,19 @@ document.addEventListener('DOMContentLoaded', function () {
 
     list.innerHTML = accounts.map(a => {
       const meta = ACCOUNT_META[a.type] || { cls: 'ai-checking', emoji: '🏦', label: a.type };
-      const neg  = a.balance < 0 ? ' neg' : '';
+      // credit: balance is negative for debt → always red, show absolute value
+      // person: positive = te deben (green), negative = les debes (red)
+      // asset: red only if overdraft (negative)
+      const isCredit = a.type === 'credit';
+      const neg      = (isCredit || a.balance < 0) ? ' neg' : '';
+      const dispBal  = formatCOP(isCredit ? Math.abs(a.balance) : a.balance);
       return `<div class="account-card">
         <div class="account-icon ${meta.cls}">${escHtml(a.icon || meta.emoji)}</div>
         <div class="account-info">
           <div class="account-name">${escHtml(a.name)}</div>
           <div class="account-type">${meta.label}</div>
         </div>
-        <div class="account-balance${neg}">${formatCOP(a.balance)}</div>
+        <div class="account-balance${neg}">${dispBal}</div>
         <button type="button" class="more-btn"
           data-acctid="${a.id}"
           data-acctname="${escHtml(a.name)}"
@@ -1163,11 +1174,21 @@ document.addEventListener('DOMContentLoaded', function () {
 
     let selectedIcon = '🏦';
 
+    const creditNote = $('credit-balance-note');
+
+    function updateTypeUI(type) {
+      // Hide/show balance section
+      if (balWrap) balWrap.style.display = (type === 'person') ? 'none' : '';
+      // Credit note and placeholder
+      if (creditNote) creditNote.style.display = (type === 'credit') ? '' : 'none';
+      if (balInp) balInp.placeholder = (type === 'credit') ? 'Deuda actual en COP (ej: 500000)' : 'Saldo inicial (opcional)';
+    }
+
     function openAddAccountModal() {
       if (nameInp)  nameInp.value  = '';
       if (balInp)   balInp.value   = '';
       if (typeInp)  typeInp.value  = 'bank';
-      if (balWrap)  balWrap.style.display = '';
+      updateTypeUI('bank');
       if (iconPicker) {
         iconPicker.querySelectorAll('.icon-opt').forEach((el, i) => {
           el.classList.toggle('active', i === 0);
@@ -1185,11 +1206,8 @@ document.addEventListener('DOMContentLoaded', function () {
     closeBtn?.addEventListener('click', closeAddAccountModal);
     overlay.addEventListener('click', e => { if (e.target === overlay) closeAddAccountModal(); });
 
-    // Show/hide balance field based on type
-    typeInp?.addEventListener('change', () => {
-      const t = typeInp.value;
-      if (balWrap) balWrap.style.display = (t === 'person') ? 'none' : '';
-    });
+    // Show/hide balance field and credit note based on type
+    typeInp?.addEventListener('change', () => updateTypeUI(typeInp.value));
 
     // Icon picker
     iconPicker?.querySelectorAll('.icon-opt').forEach(opt => {
@@ -1360,6 +1378,16 @@ document.addEventListener('DOMContentLoaded', function () {
   // ============================================================
   // AUTH SCREEN INTERACTIONS
   // ============================================================
+  function afterAuth() {
+    if (!localStorage.getItem('fintrack-onboarding-done') && typeof window._showOnboarding === 'function') {
+      window._showOnboarding();
+    } else {
+      showApp();
+      navigateTo('home');
+      loadDashboard(); loadCategories(); loadAccounts(); loadTransactions();
+    }
+  }
+
   function initAuthScreen() {
     const loginForm    = $('auth-login-form');
     const registerForm = $('auth-register-form');
@@ -1372,6 +1400,11 @@ document.addEventListener('DOMContentLoaded', function () {
         const form = tab.dataset.form;
         if (loginForm)    loginForm.style.display    = form === 'login'    ? '' : 'none';
         if (registerForm) registerForm.style.display = form === 'register' ? '' : 'none';
+        // Hide forgot form when switching tabs
+        const forgotForm = $('auth-forgot-form');
+        if (forgotForm) forgotForm.style.display = 'none';
+        const tabs = $('auth-tabs');
+        if (tabs) tabs.style.display = '';
         $('login-error')    && ($('login-error').textContent    = '');
         $('register-error') && ($('register-error').textContent = '');
       });
@@ -1388,9 +1421,7 @@ document.addEventListener('DOMContentLoaded', function () {
       try {
         const res = await API.login({ email, password });
         storeAuth(res.session?.access_token, res.user);
-        showApp();
-        navigateTo('home');
-        loadDashboard(); loadCategories(); loadAccounts(); loadTransactions();
+        afterAuth();
       } catch (err) {
         if (errEl) errEl.textContent = err.message;
       } finally {
@@ -1414,11 +1445,8 @@ document.addEventListener('DOMContentLoaded', function () {
         const res = await API.register({ email, password, name });
         if (res.session?.access_token) {
           storeAuth(res.session.access_token, res.user);
-          showApp();
-          navigateTo('home');
-          loadDashboard(); loadCategories(); loadAccounts(); loadTransactions();
+          afterAuth();
         } else {
-          // Email confirmation required
           if (errEl) { errEl.style.color = 'var(--income)'; errEl.textContent = 'Cuenta creada. Revisa tu email para confirmar.'; }
         }
       } catch (err) {
@@ -1428,28 +1456,21 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     });
 
-    $('btn-forgot-password')?.addEventListener('click', async () => {
-      const email = $('login-email')?.value.trim();
-      const errEl = $('login-error');
-      if (!email) { if (errEl) errEl.textContent = 'Escribe tu email primero'; return; }
-      try {
-        await API.resetPassword({ email });
-        if (errEl) { errEl.style.color = 'var(--income)'; errEl.textContent = 'Email de recuperación enviado ✓'; }
-      } catch (err) {
-        if (errEl) errEl.textContent = err.message;
-      }
-    });
-
     $('btn-logout')?.addEventListener('click', async () => {
       try { await API.logout(); } catch {}
       storeAuth(null, null);
       _cachedAccounts = []; _cachedCategories = []; _txCache = null;
       showAuth();
-      // Reset register form visibility
       if (loginForm)    loginForm.style.display    = '';
       if (registerForm) registerForm.style.display = 'none';
+      const forgotForm = $('auth-forgot-form');
+      if (forgotForm) forgotForm.style.display = 'none';
+      const tabs = $('auth-tabs');
+      if (tabs) tabs.style.display = '';
       authTabs.forEach((t, i) => t.classList.toggle('active', i === 0));
     });
+
+    // Forgot password UI is wired in auth.js via window.initForgotPassword
   }
 
   // ============================================================
@@ -1463,15 +1484,19 @@ document.addEventListener('DOMContentLoaded', function () {
   initAddBudgetModal();
   initTxActions();
   initExportModal();
+
+  // auth.js registers window.initOnboarding and window.initForgotPassword
+  window.initOnboarding?.(function () {
+    showApp();
+    navigateTo('home');
+    loadDashboard(); loadCategories(); loadAccounts(); loadTransactions();
+  });
+  window.initForgotPassword?.();
+
   initAuthScreen();
 
   if (getStoredToken()) {
-    showApp();
-    navigateTo('home');
-    loadDashboard();
-    loadCategories();
-    loadAccounts();
-    loadTransactions();
+    afterAuth();
   } else {
     showAuth();
   }
