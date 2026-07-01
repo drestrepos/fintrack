@@ -640,18 +640,25 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  function openEditBudget(id, currentAmountCentavos) {
+  function openEditBudget(id, currentAmountCentavos, currentPayDay) {
     openEditSheet('Editar presupuesto', `
       <div class="field" style="margin-bottom:10px;"><div class="field-inner">
         <span class="field-icon">$</span>
         <input type="number" id="es-amount" class="field-input mono"
           value="${Math.round(currentAmountCentavos / 100)}"
           placeholder="Monto en pesos" inputmode="decimal" min="0" step="1000">
+      </div></div>
+      <div class="field"><div class="field-inner">
+        <span class="field-icon">📅</span>
+        <input type="number" id="es-payday" class="field-input mono"
+          value="${currentPayDay || ''}"
+          placeholder="Día de pago (opcional, ej: 15)" inputmode="numeric" min="1" max="31">
       </div></div>`, async () => {
-      const pesos = parseFloat($('es-amount')?.value || '0');
+      const pesos  = parseFloat($('es-amount')?.value  || '0');
+      const payDay = parseInt($('es-payday')?.value || '0', 10) || null;
       if (pesos <= 0) { showToast('Escribe un monto válido', 'error'); return; }
       try {
-        await API.updateBudget(id, { amount: Math.round(pesos * 100) });
+        await API.updateBudget(id, { amount: Math.round(pesos * 100), pay_day: payDay });
         showToast('Presupuesto actualizado ✓', 'success');
         closeEditSheet();
         loadBudget();
@@ -843,22 +850,190 @@ document.addEventListener('DOMContentLoaded', function () {
 
     if (!categories.length) {
       list.innerHTML = `<div class="empty-state"><div class="empty-icon">🏷️</div>
-        <div class="empty-title">Sin movimientos este mes</div></div>`;
+        <div class="empty-title">No hay categorías</div></div>`;
       return;
     }
 
-    list.innerHTML = `<div class="tx-group">` +
-      categories.map(cat => {
-        const cls  = cat.total >= 0 ? 'income' : 'expense';
-        const sign = cat.total >= 0 ? '+' : '';
-        return `<div class="tx-group-item">
-          <div class="tx-icon">${escHtml(cat.icon || '🏷️')}</div>
-          <div class="tx-info">
-            <div class="tx-name">${escHtml(cat.name)}</div>
-          </div>
-          <div class="tx-amount ${cls}">${sign}${formatCOP(Math.abs(cat.total))}</div>
-        </div>`;
-      }).join('') + `</div>`;
+    const active  = categories.filter(c => c.income > 0 || c.expense > 0);
+    const inactive = categories.filter(c => c.income === 0 && c.expense === 0);
+
+    function catRow(cat) {
+      const hasActivity = cat.income > 0 || cat.expense > 0;
+      const cls  = !hasActivity ? 'muted' : (cat.total >= 0 ? 'income' : 'expense');
+      const sign = cat.total > 0 ? '+' : '';
+      const amt  = hasActivity ? `${sign}${formatCOP(Math.abs(cat.total))}` : '<span style="color:var(--text-muted)">$0</span>';
+      return `<div class="tx-group-item">
+        <div class="tx-icon">${escHtml(cat.icon || '🏷️')}</div>
+        <div class="tx-info">
+          <div class="tx-name"${!hasActivity ? ' style="color:var(--text-muted)"' : ''}>${escHtml(cat.name)}</div>
+        </div>
+        <div class="tx-amount ${cls}">${amt}</div>
+        <button class="btn-cat-menu" data-id="${escHtml(cat.id)}" data-name="${escHtml(cat.name)}" data-icon="${escHtml(cat.icon || '')}" title="Opciones">···</button>
+      </div>`;
+    }
+
+    let html = '<div class="tx-group">';
+    if (active.length)  html += active.map(catRow).join('');
+    if (active.length && inactive.length) {
+      html += `<div class="tx-group-divider" style="font-size:11px;color:var(--text-muted);padding:6px 0 2px;border-top:1px solid var(--border);margin-top:4px;">Sin movimientos este mes</div>`;
+    }
+    if (inactive.length) html += inactive.map(catRow).join('');
+    html += '</div>';
+
+    list.innerHTML = html;
+
+    list.querySelectorAll('.btn-cat-menu').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openCategoryActionSheet(btn.dataset.id, btn.dataset.name, btn.dataset.icon || '');
+      });
+    });
+  }
+
+  function openCategoryActionSheet(id, name, icon) {
+    openActionSheet(name, [
+      { label: '✏️ Editar categoría', handler: () => openEditCategoryModal(id, name, icon) },
+      { label: '🗑️ Eliminar categoría', handler: () => confirmDeleteCategory(id, name), danger: true },
+    ]);
+  }
+
+  function openEditCategoryModal(id, currentName, currentIcon) {
+    const overlay  = $('modal-edit-category-overlay');
+    const nameInp  = $('edit-category-name');
+    const iconPicker = $('edit-category-icon-picker');
+    if (!overlay) return;
+
+    // Pre-populate
+    if (nameInp) nameInp.value = currentName || '';
+
+    // Select matching icon or first
+    let matched = false;
+    iconPicker?.querySelectorAll('.icon-opt').forEach(opt => {
+      const isMatch = opt.dataset.icon === currentIcon;
+      opt.classList.toggle('active', isMatch);
+      if (isMatch) matched = true;
+    });
+    if (!matched) iconPicker?.querySelector('.icon-opt')?.classList.add('active');
+
+    overlay._editId   = id;
+    overlay._editIcon = currentIcon || iconPicker?.querySelector('.icon-opt.active')?.dataset.icon || '📁';
+    overlay.classList.add('open');
+    nameInp?.focus();
+  }
+
+  function initEditCategoryModal() {
+    const overlay   = $('modal-edit-category-overlay');
+    if (!overlay) return;
+    const closeBtn  = $('edit-category-close');
+    const nameInp   = $('edit-category-name');
+    const submitBtn = $('edit-category-submit');
+    const iconPicker = $('edit-category-icon-picker');
+
+    function closeModal() { overlay.classList.remove('open'); }
+
+    closeBtn?.addEventListener('click', closeModal);
+    overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+
+    iconPicker?.querySelectorAll('.icon-opt').forEach(opt => {
+      opt.addEventListener('click', () => {
+        iconPicker.querySelectorAll('.icon-opt').forEach(o => o.classList.remove('active'));
+        opt.classList.add('active');
+        overlay._editIcon = opt.dataset.icon;
+      });
+    });
+
+    submitBtn?.addEventListener('click', async () => {
+      const name = nameInp?.value.trim();
+      const icon = overlay._editIcon || '📁';
+      const id   = overlay._editId;
+      if (!name) { showToast('Escribe un nombre', 'error'); return; }
+      if (!id)   return;
+      submitBtn.textContent = 'Guardando…'; submitBtn.disabled = true;
+      try {
+        await API.updateCategory(id, { name, icon });
+        showToast('Categoría actualizada ✓');
+        closeModal();
+        await refreshCategories();
+      } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+      } finally {
+        submitBtn.textContent = 'Guardar cambios'; submitBtn.disabled = false;
+      }
+    });
+  }
+
+  function confirmDeleteCategory(id, name) {
+    if (!window.confirm(`¿Eliminar la categoría "${name}"? Esta acción no se puede deshacer.`)) return;
+    API.deleteCategory(id)
+      .then(() => { showToast('Categoría eliminada'); refreshCategories(); })
+      .catch(err => showToast('Error: ' + err.message, 'error'));
+  }
+
+  async function refreshCategories() {
+    await loadCategories();
+    await loadResumen(resumenYear, resumenMonth);
+  }
+
+  function initAddCategoryModal() {
+    const overlay  = $('modal-add-category-overlay');
+    if (!overlay) return;
+    const closeBtn = $('add-category-close');
+    const nameInp  = $('add-category-name');
+    const submitBtn = $('add-category-submit');
+    const iconPicker = $('add-category-icon-picker');
+    const colorPicker = $('add-category-color-picker');
+    let selectedIcon  = '📁';
+    let selectedColor = '#607d8b';
+
+    function openModal() {
+      if (nameInp) nameInp.value = '';
+      // Highlight first icon/color
+      iconPicker?.querySelectorAll('.icon-opt').forEach((el, i) => el.classList.toggle('active', i === 0));
+      colorPicker?.querySelectorAll('.color-opt').forEach((el, i) => el.classList.toggle('active', i === 0));
+      if (iconPicker) selectedIcon = iconPicker.querySelector('.icon-opt')?.dataset.icon || '📁';
+      if (colorPicker) selectedColor = colorPicker.querySelector('.color-opt')?.dataset.color || '#607d8b';
+      overlay.classList.add('open');
+      nameInp?.focus();
+    }
+
+    function closeModal() { overlay.classList.remove('open'); }
+
+    $('btn-add-category')?.addEventListener('click', openModal);
+    closeBtn?.addEventListener('click', closeModal);
+    overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+
+    iconPicker?.querySelectorAll('.icon-opt').forEach(opt => {
+      opt.addEventListener('click', () => {
+        iconPicker.querySelectorAll('.icon-opt').forEach(o => o.classList.remove('active'));
+        opt.classList.add('active');
+        selectedIcon = opt.dataset.icon;
+      });
+    });
+
+    colorPicker?.querySelectorAll('.color-opt').forEach(opt => {
+      opt.addEventListener('click', () => {
+        colorPicker.querySelectorAll('.color-opt').forEach(o => o.classList.remove('active'));
+        opt.classList.add('active');
+        selectedColor = opt.dataset.color;
+      });
+    });
+
+    submitBtn?.addEventListener('click', async () => {
+      const name = nameInp?.value.trim();
+      if (!name) { showToast('Escribe un nombre para la categoría', 'error'); return; }
+      submitBtn.textContent = 'Guardando…'; submitBtn.disabled = true;
+      try {
+        await API.createCategory({ name, icon: selectedIcon, color: selectedColor });
+        showToast('Categoría creada ✓');
+        closeModal();
+        await loadCategories();
+        await loadResumen(resumenYear, resumenMonth);
+      } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+      } finally {
+        submitBtn.textContent = 'Guardar'; submitBtn.disabled = false;
+      }
+    });
   }
 
   // ============================================================
@@ -1101,6 +1276,24 @@ document.addEventListener('DOMContentLoaded', function () {
         <div class="empty-desc">Agrega un presupuesto para este mes</div>
       </div>`;
     } else {
+      const now      = new Date();
+      const todayDay = now.getDate();
+      const isThisMonth = (budgetYear === now.getFullYear() && budgetMonth === now.getMonth());
+
+      function payDayBadge(b) {
+        if (!b.pay_day) return '';
+        const pct = b.amount > 0 ? b.spent / b.amount : 0;
+        if (isThisMonth) {
+          if (todayDay > b.pay_day) {
+            return pct >= 1
+              ? `<span class="pay-badge pay-done">✓ Pagado</span>`
+              : `<span class="pay-badge pay-due">⚠ Vencido</span>`;
+          }
+          return `<span class="pay-badge pay-upcoming">📅 Pagar antes del día ${b.pay_day}</span>`;
+        }
+        return `<span class="pay-badge pay-upcoming">📅 Día ${b.pay_day}</span>`;
+      }
+
       container.innerHTML = budgets.map(b => {
         const pct  = b.amount > 0 ? Math.min(Math.round(b.spent / b.amount * 100), 100) : 0;
         const over = b.spent > b.amount;
@@ -1114,9 +1307,11 @@ document.addEventListener('DOMContentLoaded', function () {
             <button type="button" class="more-btn"
               data-budgetid="${b.id}"
               data-budgetamt="${b.amount}"
+              data-budgetpayday="${b.pay_day || ''}"
               data-budgetname="${escHtml(b.category?.name || '—')}"
               aria-label="Opciones">···</button>
           </div>
+          ${payDayBadge(b)}
           <div class="budget-bar-wrap">
             <div class="budget-bar ${barCls}" style="width:${pct}%"></div>
           </div>
@@ -1130,11 +1325,12 @@ document.addEventListener('DOMContentLoaded', function () {
       // Wire ··· buttons
       container.querySelectorAll('.more-btn[data-budgetid]').forEach(btn => {
         btn.addEventListener('click', () => {
-          const id   = btn.dataset.budgetid;
-          const amt  = parseInt(btn.dataset.budgetamt, 10);
-          const name = btn.dataset.budgetname;
+          const id     = btn.dataset.budgetid;
+          const amt    = parseInt(btn.dataset.budgetamt, 10);
+          const payDay = btn.dataset.budgetpayday ? parseInt(btn.dataset.budgetpayday, 10) : null;
+          const name   = btn.dataset.budgetname;
           openActionSheet(name, [
-            { label: '✏️ Editar monto', handler: () => openEditBudget(id, amt) },
+            { label: '✏️ Editar presupuesto', handler: () => openEditBudget(id, amt, payDay) },
             { label: '🗑️ Eliminar presupuesto', danger: true, handler: () =>
               confirmDelete('Eliminar presupuesto', async () => {
                 await API.deleteBudget(id);
@@ -1176,12 +1372,24 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const creditNote = $('credit-balance-note');
 
+    const personNote = $('person-balance-note');
+
     function updateTypeUI(type) {
-      // Hide/show balance section
-      if (balWrap) balWrap.style.display = (type === 'person') ? 'none' : '';
-      // Credit note and placeholder
+      if (balWrap) balWrap.style.display = '';
       if (creditNote) creditNote.style.display = (type === 'credit') ? '' : 'none';
-      if (balInp) balInp.placeholder = (type === 'credit') ? 'Deuda actual en COP (ej: 500000)' : 'Saldo inicial (opcional)';
+      if (personNote) personNote.style.display = (type === 'person') ? '' : 'none';
+      if (balInp) {
+        if (type === 'credit') {
+          balInp.placeholder = 'Deuda actual en COP (ej: 500000)';
+          balInp.removeAttribute('min');
+        } else if (type === 'person') {
+          balInp.placeholder = 'Saldo inicial (positivo = te debe, negativo = le debes)';
+          balInp.removeAttribute('min');
+        } else {
+          balInp.placeholder = 'Saldo inicial (opcional)';
+          balInp.removeAttribute('min');
+        }
+      }
     }
 
     function openAddAccountModal() {
@@ -1230,7 +1438,7 @@ document.addEventListener('DOMContentLoaded', function () {
       try {
         await API.createAccount({
           name, type, icon: selectedIcon,
-          initial_balance: type === 'person' ? 0 : balCentavos,
+          initial_balance: balCentavos,
         });
         showToast('Cuenta creada ✓', 'success');
         closeAddAccountModal();
@@ -1249,10 +1457,12 @@ document.addEventListener('DOMContentLoaded', function () {
     const overlay = $('modal-add-budget-overlay');
     if (!overlay) return;
 
-    const catSel = $('add-budget-category');
-    const amtInp = $('add-budget-amount');
+    const catSel    = $('add-budget-category');
+    const amtInp    = $('add-budget-amount');
+    const payDayInp = $('add-budget-payday');
 
-    if (amtInp) amtInp.value = '';
+    if (amtInp)    amtInp.value    = '';
+    if (payDayInp) payDayInp.value = '';
 
     // Populate categories not yet budgeted this month
     if (catSel) {
@@ -1283,6 +1493,7 @@ document.addEventListener('DOMContentLoaded', function () {
     submitBtn?.addEventListener('click', async () => {
       const catId  = $('add-budget-category')?.value;
       const amount = parseFloat($('add-budget-amount')?.value || '0');
+      const payDay = parseInt($('add-budget-payday')?.value || '0', 10) || null;
 
       if (!catId)         { showToast('Selecciona una categoría', 'error'); return; }
       if (amount <= 0)    { showToast('Escribe un monto válido', 'error'); return; }
@@ -1292,6 +1503,7 @@ document.addEventListener('DOMContentLoaded', function () {
           category_id: catId,
           month: monthKey(budgetYear, budgetMonth),
           amount: Math.round(amount * 100),
+          pay_day: payDay,
         });
         showToast('Presupuesto guardado ✓', 'success');
         closeModal();
@@ -1476,10 +1688,8 @@ document.addEventListener('DOMContentLoaded', function () {
   // ============================================================
   // INIT
   // ============================================================
-  $('btn-add-category')?.addEventListener('click', () =>
-    showToast('Próximamente: agregar categorías', 'info')
-  );
-
+  initAddCategoryModal();
+  initEditCategoryModal();
   initAddAccountModal();
   initAddBudgetModal();
   initTxActions();
@@ -1500,4 +1710,6 @@ document.addEventListener('DOMContentLoaded', function () {
   } else {
     showAuth();
   }
+
+  console.log('App iniciada correctamente');
 });

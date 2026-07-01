@@ -146,23 +146,41 @@ app.delete('/api/accounts/:id', async (req, res) => {
 });
 
 // ============================================================
-// CATEGORÍAS (globales, sin filtro por usuario)
+// CATEGORÍAS (por usuario)
 // ============================================================
 app.get('/api/categories', async (req, res) => {
+  const uid = req.user.id;
   const { data, error } = await supabase
     .from('categories')
     .select('*')
+    .eq('user_id', uid)
     .order('name');
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 });
 
-app.patch('/api/categories/:id', async (req, res) => {
-  const updates = {};
-  if (req.body.name !== undefined) updates.name = req.body.name;
-  if (req.body.icon !== undefined) updates.icon = req.body.icon;
+app.post('/api/categories', async (req, res) => {
+  const uid = req.user.id;
+  const { name, icon, color } = req.body;
+  if (!name) return res.status(400).json({ error: 'name es requerido' });
   const { data, error } = await supabase
-    .from('categories').update(updates).eq('id', req.params.id).select().single();
+    .from('categories')
+    .insert([{ user_id: uid, name, icon, color }])
+    .select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.status(201).json(data);
+});
+
+app.patch('/api/categories/:id', async (req, res) => {
+  const uid = req.user.id;
+  const updates = {};
+  if (req.body.name  !== undefined) updates.name  = req.body.name;
+  if (req.body.icon  !== undefined) updates.icon  = req.body.icon;
+  if (req.body.color !== undefined) updates.color = req.body.color;
+  const { data, error } = await supabase
+    .from('categories').update(updates)
+    .eq('id', req.params.id).eq('user_id', uid)
+    .select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 });
@@ -170,14 +188,14 @@ app.patch('/api/categories/:id', async (req, res) => {
 app.delete('/api/categories/:id', async (req, res) => {
   const { id } = req.params;
   const uid = req.user.id;
-  // Only block if THIS user has transactions with this category
   const txCheck = await supabase
     .from('transactions').select('id', { count: 'exact', head: true })
     .eq('category_id', id).eq('user_id', uid);
   if (txCheck.error) return res.status(500).json({ error: txCheck.error.message });
   if ((txCheck.count || 0) > 0)
     return res.status(409).json({ error: 'La categoría tiene transacciones y no puede eliminarse' });
-  const { error } = await supabase.from('categories').delete().eq('id', id);
+  const { error } = await supabase.from('categories').delete()
+    .eq('id', id).eq('user_id', uid);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true });
 });
@@ -284,7 +302,9 @@ app.get('/api/dashboard', async (req, res) => {
   });
 
   const personBalMap = {};
-  accRes.data.filter(a => a.type === 'person').forEach(a => { personBalMap[a.id] = 0; });
+  accRes.data.filter(a => a.type === 'person').forEach(a => {
+    personBalMap[a.id] = a.initial_balance || 0; // include initial_balance for persons
+  });
   allJeRes.data.forEach(je => {
     if (personBalMap[je.account_id] !== undefined)
       personBalMap[je.account_id] += je.entry_type === 'credit' ? je.amount : -je.amount;
@@ -343,6 +363,7 @@ app.get('/api/accounts/:id/balance', async (req, res) => {
   let balance = 0;
 
   if (accRes.data.type === 'person') {
+    balance = accRes.data.initial_balance || 0; // start from initial_balance
     const jeRes = await supabase.from('journal_entries').select('amount, entry_type')
       .eq('account_id', id).eq('user_id', uid);
     if (jeRes.error) return res.status(500).json({ error: jeRes.error.message });
@@ -383,22 +404,25 @@ app.get('/api/resumen', async (req, res) => {
   const lastDay = new Date(year, monthNum, 0).getDate();
   const end     = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
 
-  const [accRes, allTxRes, monthTxRes, allJeRes] = await Promise.all([
+  const [accRes, allTxRes, monthTxRes, allJeRes, catRes] = await Promise.all([
     supabase.from('accounts').select('*')
       .eq('user_id', uid).eq('active', true).order('name'),
     supabase.from('transactions').select('account_id, amount, type')
       .eq('user_id', uid).not('description', 'ilike', '%(PD%'),
     supabase.from('transactions')
-      .select('category_id, amount, type, category:categories(id,name,icon)')
+      .select('category_id, amount, type')
       .eq('user_id', uid).gte('date', start).lte('date', end),
     supabase.from('journal_entries').select('account_id, amount, entry_type')
       .eq('user_id', uid),
+    supabase.from('categories').select('id, name, icon, color')
+      .eq('user_id', uid).order('name'),
   ]);
 
   if (accRes.error)     return res.status(500).json({ error: accRes.error.message });
   if (allTxRes.error)   return res.status(500).json({ error: allTxRes.error.message });
   if (monthTxRes.error) return res.status(500).json({ error: monthTxRes.error.message });
   if (allJeRes.error)   return res.status(500).json({ error: allJeRes.error.message });
+  if (catRes.error)     return res.status(500).json({ error: catRes.error.message });
 
   const bankAccts   = accRes.data.filter(a => a.type !== 'person');
   const personAccts = accRes.data.filter(a => a.type === 'person');
@@ -411,7 +435,7 @@ app.get('/api/resumen', async (req, res) => {
   });
 
   const personBalMap = {};
-  personAccts.forEach(a => { personBalMap[a.id] = 0; });
+  personAccts.forEach(a => { personBalMap[a.id] = a.initial_balance || 0; });
   allJeRes.data.forEach(je => {
     if (personBalMap[je.account_id] === undefined) return;
     personBalMap[je.account_id] += je.entry_type === 'credit' ? je.amount : -je.amount;
@@ -433,24 +457,29 @@ app.get('/api/resumen', async (req, res) => {
   const balance_persons = persons.reduce((s, a) => s + a.balance, 0);
   const net_total = balance_banks + balance_wallets + balance_cash + balance_credit + balance_persons;
 
+  // Start with all user categories at 0, then fill in month activity
   const catMap = {};
+  (catRes.data || []).forEach(c => {
+    catMap[c.id] = { id: c.id, name: c.name, icon: c.icon || '', color: c.color || '', income: 0, expense: 0, total: 0 };
+  });
   monthTxRes.data.forEach(tx => {
-    if (!tx.category_id) return;
-    const k = tx.category_id;
-    if (!catMap[k]) {
-      catMap[k] = {
-        id: tx.category?.id || k, name: tx.category?.name || '—',
-        icon: tx.category?.icon || '', income: 0, expense: 0, total: 0,
-      };
-    }
+    if (!tx.category_id || !catMap[tx.category_id]) return;
     if (tx.type === 'credit') {
-      catMap[k].income += tx.amount; catMap[k].total += tx.amount;
+      catMap[tx.category_id].income += tx.amount;
+      catMap[tx.category_id].total  += tx.amount;
     } else {
-      catMap[k].expense += tx.amount; catMap[k].total -= tx.amount;
+      catMap[tx.category_id].expense += tx.amount;
+      catMap[tx.category_id].total   -= tx.amount;
     }
   });
 
-  const categories = Object.values(catMap).sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
+  // Sort: categories with activity first (by absolute total desc), then $0 ones alphabetically
+  const categories = Object.values(catMap).sort((a, b) => {
+    const aActive = a.income > 0 || a.expense > 0;
+    const bActive = b.income > 0 || b.expense > 0;
+    if (aActive !== bActive) return aActive ? -1 : 1;
+    return Math.abs(b.total) - Math.abs(a.total);
+  });
 
   res.json({ accounts, persons, categories,
     balance_banks, balance_wallets, balance_cash, balance_credit, balance_persons, net_total });
@@ -546,19 +575,21 @@ app.get('/api/budgets', async (req, res) => {
   const result = budgetsRes.data.map(b => ({
     id: b.id, category_id: b.category_id, category: b.category,
     month: b.month, amount: b.amount, spent: spentMap[b.category_id] || 0,
+    pay_day: b.pay_day || null,
   }));
   res.json(result);
 });
 
 app.post('/api/budgets', async (req, res) => {
   const uid = req.user.id;
-  const { category_id, month, amount } = req.body;
+  const { category_id, month, amount, pay_day } = req.body;
   if (!category_id || !month || !amount)
     return res.status(400).json({ error: 'category_id, month y amount son requeridos' });
+  const row = { user_id: uid, category_id, month, amount: Math.round(amount) };
+  if (pay_day) row.pay_day = parseInt(pay_day, 10);
   const { data, error } = await supabase
     .from('budgets')
-    .upsert([{ user_id: uid, category_id, month, amount: Math.round(amount) }],
-            { onConflict: 'user_id,category_id,month' })
+    .upsert([row], { onConflict: 'user_id,category_id,month' })
     .select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.status(201).json(data);
@@ -566,10 +597,14 @@ app.post('/api/budgets', async (req, res) => {
 
 app.patch('/api/budgets/:id', async (req, res) => {
   const uid = req.user.id;
-  const { amount } = req.body;
-  if (!amount) return res.status(400).json({ error: 'amount es requerido' });
+  const { amount, pay_day } = req.body;
+  if (amount === undefined && pay_day === undefined)
+    return res.status(400).json({ error: 'Se requiere amount o pay_day' });
+  const updates = {};
+  if (amount  !== undefined) updates.amount  = Math.round(amount);
+  if (pay_day !== undefined) updates.pay_day = pay_day ? parseInt(pay_day, 10) : null;
   const { data, error } = await supabase
-    .from('budgets').update({ amount: Math.round(amount) })
+    .from('budgets').update(updates)
     .eq('id', req.params.id).eq('user_id', uid)
     .select().single();
   if (error) return res.status(500).json({ error: error.message });

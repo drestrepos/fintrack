@@ -832,6 +832,29 @@
     }
     .modal-sheet::-webkit-scrollbar { display: none; }
 
+    /* Category ··· menu button */
+    .btn-cat-menu {
+      background: none; border: none; color: var(--text-muted);
+      font-size: 16px; padding: 4px 8px; cursor: pointer; border-radius: var(--radius-xs);
+      line-height: 1; letter-spacing: 1px;
+    }
+    .btn-cat-menu:hover { background: var(--surface2); color: var(--text); }
+
+    /* Color picker active state */
+    .color-opt.active { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+    /* Pay-day badges in budget view */
+    .pay-badge {
+      display: inline-block; font-size: 11px; font-weight: 600;
+      border-radius: 20px; padding: 2px 10px; margin: 4px 0 6px;
+    }
+    .pay-badge.pay-due      { background: rgba(244,67,54,.15); color: var(--expense); }
+    .pay-badge.pay-done     { background: rgba(29,158,117,.15); color: var(--income); }
+    .pay-badge.pay-upcoming { background: var(--surface2); color: var(--text-muted); }
+
+    /* Icon picker grid for category modal */
+    .icon-picker-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+
     /* Icon picker */
     .icon-picker { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
     .icon-opt {
@@ -1801,12 +1824,123 @@
         <div id="credit-balance-note" style="display:none;font-size:12px;color:var(--expense);background:var(--warn-dim);border-radius:var(--radius-xs);padding:8px 10px;margin-bottom:8px;">
           💳 El saldo inicial es tu deuda actual — se guardará como negativo
         </div>
+        <div id="person-balance-note" style="display:none;font-size:12px;color:var(--text-muted);background:var(--surface-raised);border-radius:var(--radius-xs);padding:8px 10px;margin-bottom:8px;">
+          👤 Positivo = te debe dinero · Negativo = le debes dinero
+        </div>
         <div class="field"><div class="field-inner">
           <span class="field-icon">$</span>
-          <input type="number" id="add-account-balance" class="field-input mono" placeholder="Saldo inicial (opcional)" inputmode="decimal" min="0" step="1000">
+          <input type="number" id="add-account-balance" class="field-input mono" placeholder="Saldo inicial (opcional)" inputmode="decimal" step="1000">
         </div></div>
       </div>
       <button type="button" class="btn-primary" id="add-account-submit">Crear cuenta</button>
+      <div style="height:16px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================
+     MODAL: AGREGAR CATEGORÍA
+====================================================== -->
+<div class="modal-overlay-bg" id="modal-add-category-overlay">
+  <div class="modal-sheet" role="dialog" aria-label="Nueva categoría">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <span class="modal-title">Nueva categoría</span>
+      <button type="button" class="modal-close" id="add-category-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field"><div class="field-inner">
+        <span class="field-icon">🏷️</span>
+        <input type="text" id="add-category-name" class="field-input" placeholder="Nombre de la categoría" maxlength="40" autocomplete="off">
+      </div></div>
+
+      <div class="field-label" style="margin-bottom:8px;">Icono</div>
+      <div id="add-category-icon-picker" class="icon-picker-grid" style="margin-bottom:16px;">
+        <button type="button" class="icon-opt" data-icon="📁">📁</button>
+        <button type="button" class="icon-opt" data-icon="🛒">🛒</button>
+        <button type="button" class="icon-opt" data-icon="🍕">🍕</button>
+        <button type="button" class="icon-opt" data-icon="🚗">🚗</button>
+        <button type="button" class="icon-opt" data-icon="💡">💡</button>
+        <button type="button" class="icon-opt" data-icon="🏥">🏥</button>
+        <button type="button" class="icon-opt" data-icon="✈️">✈️</button>
+        <button type="button" class="icon-opt" data-icon="🎬">🎬</button>
+        <button type="button" class="icon-opt" data-icon="👕">👕</button>
+        <button type="button" class="icon-opt" data-icon="📚">📚</button>
+        <button type="button" class="icon-opt" data-icon="🏠">🏠</button>
+        <button type="button" class="icon-opt" data-icon="💼">💼</button>
+        <button type="button" class="icon-opt" data-icon="🎮">🎮</button>
+        <button type="button" class="icon-opt" data-icon="🐾">🐾</button>
+        <button type="button" class="icon-opt" data-icon="⚽">⚽</button>
+        <button type="button" class="icon-opt" data-icon="🎁">🎁</button>
+        <button type="button" class="icon-opt" data-icon="💊">💊</button>
+        <button type="button" class="icon-opt" data-icon="🔧">🔧</button>
+        <button type="button" class="icon-opt" data-icon="📦">📦</button>
+        <button type="button" class="icon-opt" data-icon="💰">💰</button>
+      </div>
+
+      <div class="field-label" style="margin-bottom:8px;">Color</div>
+      <div id="add-category-color-picker" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;">
+        <button type="button" class="color-opt" data-color="#4caf50" style="background:#4caf50;width:28px;height:28px;border-radius:50%;border:2px solid transparent;cursor:pointer;" title="Verde"></button>
+        <button type="button" class="color-opt" data-color="#f44336" style="background:#f44336;width:28px;height:28px;border-radius:50%;border:2px solid transparent;cursor:pointer;" title="Rojo"></button>
+        <button type="button" class="color-opt" data-color="#ff9800" style="background:#ff9800;width:28px;height:28px;border-radius:50%;border:2px solid transparent;cursor:pointer;" title="Naranja"></button>
+        <button type="button" class="color-opt" data-color="#2196f3" style="background:#2196f3;width:28px;height:28px;border-radius:50%;border:2px solid transparent;cursor:pointer;" title="Azul"></button>
+        <button type="button" class="color-opt" data-color="#e91e63" style="background:#e91e63;width:28px;height:28px;border-radius:50%;border:2px solid transparent;cursor:pointer;" title="Rosa"></button>
+        <button type="button" class="color-opt" data-color="#009688" style="background:#009688;width:28px;height:28px;border-radius:50%;border:2px solid transparent;cursor:pointer;" title="Teal"></button>
+        <button type="button" class="color-opt" data-color="#9c27b0" style="background:#9c27b0;width:28px;height:28px;border-radius:50%;border:2px solid transparent;cursor:pointer;" title="Morado"></button>
+        <button type="button" class="color-opt" data-color="#673ab7" style="background:#673ab7;width:28px;height:28px;border-radius:50%;border:2px solid transparent;cursor:pointer;" title="Violeta"></button>
+        <button type="button" class="color-opt" data-color="#3f51b5" style="background:#3f51b5;width:28px;height:28px;border-radius:50%;border:2px solid transparent;cursor:pointer;" title="Índigo"></button>
+        <button type="button" class="color-opt" data-color="#795548" style="background:#795548;width:28px;height:28px;border-radius:50%;border:2px solid transparent;cursor:pointer;" title="Café"></button>
+        <button type="button" class="color-opt" data-color="#1d9e75" style="background:#1d9e75;width:28px;height:28px;border-radius:50%;border:2px solid transparent;cursor:pointer;" title="Esmeralda"></button>
+        <button type="button" class="color-opt" data-color="#607d8b" style="background:#607d8b;width:28px;height:28px;border-radius:50%;border:2px solid transparent;cursor:pointer;" title="Gris azulado"></button>
+      </div>
+
+      <button type="button" class="btn-primary" id="add-category-submit">Guardar</button>
+      <div style="height:16px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================
+     MODAL: EDITAR CATEGORÍA
+====================================================== -->
+<div class="modal-overlay-bg" id="modal-edit-category-overlay">
+  <div class="modal-sheet" role="dialog" aria-label="Editar categoría">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <span class="modal-title">Editar categoría</span>
+      <button type="button" class="modal-close" id="edit-category-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field"><div class="field-inner">
+        <span class="field-icon">🏷️</span>
+        <input type="text" id="edit-category-name" class="field-input" placeholder="Nombre de la categoría" maxlength="40" autocomplete="off">
+      </div></div>
+
+      <div class="field-label" style="margin-bottom:8px;">Icono</div>
+      <div id="edit-category-icon-picker" class="icon-picker-grid" style="margin-bottom:16px;">
+        <button type="button" class="icon-opt" data-icon="📁">📁</button>
+        <button type="button" class="icon-opt" data-icon="🛒">🛒</button>
+        <button type="button" class="icon-opt" data-icon="🍕">🍕</button>
+        <button type="button" class="icon-opt" data-icon="🚗">🚗</button>
+        <button type="button" class="icon-opt" data-icon="💡">💡</button>
+        <button type="button" class="icon-opt" data-icon="🏥">🏥</button>
+        <button type="button" class="icon-opt" data-icon="✈️">✈️</button>
+        <button type="button" class="icon-opt" data-icon="🎬">🎬</button>
+        <button type="button" class="icon-opt" data-icon="👕">👕</button>
+        <button type="button" class="icon-opt" data-icon="📚">📚</button>
+        <button type="button" class="icon-opt" data-icon="🏠">🏠</button>
+        <button type="button" class="icon-opt" data-icon="💼">💼</button>
+        <button type="button" class="icon-opt" data-icon="🎮">🎮</button>
+        <button type="button" class="icon-opt" data-icon="🐾">🐾</button>
+        <button type="button" class="icon-opt" data-icon="⚽">⚽</button>
+        <button type="button" class="icon-opt" data-icon="🎁">🎁</button>
+        <button type="button" class="icon-opt" data-icon="💊">💊</button>
+        <button type="button" class="icon-opt" data-icon="🔧">🔧</button>
+        <button type="button" class="icon-opt" data-icon="📦">📦</button>
+        <button type="button" class="icon-opt" data-icon="💰">💰</button>
+      </div>
+
+      <button type="button" class="btn-primary" id="edit-category-submit">Guardar cambios</button>
       <div style="height:16px;"></div>
     </div>
   </div>
@@ -1832,6 +1966,10 @@
       <div class="field"><div class="field-inner">
         <span class="field-icon">$</span>
         <input type="number" id="add-budget-amount" class="field-input mono" placeholder="Límite mensual en pesos" inputmode="decimal" min="0" step="1000">
+      </div></div>
+      <div class="field"><div class="field-inner">
+        <span class="field-icon">📅</span>
+        <input type="number" id="add-budget-payday" class="field-input mono" placeholder="Día de pago (opcional, ej: 15)" inputmode="numeric" min="1" max="31">
       </div></div>
       <button type="button" class="btn-primary" id="add-budget-submit">Guardar presupuesto</button>
       <div style="height:16px;"></div>

@@ -44,6 +44,7 @@ const API = (() => {
 
     // CATEGORÍAS
     getCategories:   ()         => request('GET',    '/categories'),
+    createCategory:  (data)     => request('POST',   '/categories', data),
     updateCategory:  (id, data) => request('PATCH',  `/categories/${id}`, data),
     deleteCategory:  (id)       => request('DELETE', `/categories/${id}`),
 

@@ -7,14 +7,38 @@
 
   const ONBOARDING_KEY = 'fintrack-onboarding-done';
 
-  // Categories shown in onboarding step 2 (matched by name against seed data)
+  // 12 default categories created for every new user
+  const DEFAULT_CATEGORIES = [
+    { name: 'Mercado',        icon: '🛒', color: '#4caf50' },
+    { name: 'Comida',         icon: '🍕', color: '#f44336' },
+    { name: 'Transporte',     icon: '🚗', color: '#ff9800' },
+    { name: 'Servicios',      icon: '💡', color: '#2196f3' },
+    { name: 'Salud',          icon: '🏥', color: '#e91e63' },
+    { name: 'Viajes',         icon: '✈️', color: '#009688' },
+    { name: 'Entretenimiento',icon: '🎬', color: '#9c27b0' },
+    { name: 'Ropa',           icon: '👕', color: '#673ab7' },
+    { name: 'Educación',      icon: '📚', color: '#3f51b5' },
+    { name: 'Gastos apto',    icon: '🏠', color: '#795548' },
+    { name: 'Sueldo',         icon: '💼', color: '#1d9e75' },
+    { name: 'Otros',          icon: '📦', color: '#607d8b' },
+  ];
+
+  // Categories shown in onboarding step 2
   const ONBOARDING_CATS = [
     { name: 'Mercado',    icon: '🛒' },
-    { name: 'Comida',     icon: '🍽️' },
-    { name: 'Transporte', icon: '🚌' },
+    { name: 'Comida',     icon: '🍕' },
+    { name: 'Transporte', icon: '🚗' },
     { name: 'Servicios',  icon: '💡' },
-    { name: 'Salud',      icon: '❤️' },
+    { name: 'Salud',      icon: '🏥' },
   ];
+
+  async function createDefaultCategories() {
+    try {
+      await Promise.allSettled(DEFAULT_CATEGORIES.map(cat => API.createCategory(cat)));
+    } catch (e) {
+      // Non-fatal: user can add categories manually
+    }
+  }
 
   // ============================================================
   // ONBOARDING WIZARD
@@ -36,6 +60,8 @@
       if (app) app.style.display = 'none';
       screen.style.display = 'flex';
       goToStep(1);
+      // Seed default categories for new user (non-blocking)
+      createDefaultCategories();
     };
 
     function completeOnboarding() {
@@ -87,6 +113,9 @@
       goToStep(2);
       await loadStep2();
     }
+
+    // Called from _showOnboarding to seed categories before wizard
+    window._createDefaultCategories = createDefaultCategories;
 
     // ── Step 2: Monthly budgets ──────────────────────────────────
     const s2Btn  = document.getElementById('ob-step2-btn');
