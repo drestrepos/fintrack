@@ -666,6 +666,16 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
+  async function toggleBudgetFulfilled(id, value) {
+    try {
+      await API.updateBudget(id, { fulfilled: value });
+      showToast(value ? 'Marcado como cumplido ✓' : 'Desmarcado', 'success');
+      loadBudget();
+    } catch (err) {
+      showToast('Error: ' + err.message, 'error');
+    }
+  }
+
   // ============================================================
   // 8. FILTER CHIPS + DROPDOWNS (Movimientos)
   // ============================================================
@@ -693,6 +703,24 @@ document.addEventListener('DOMContentLoaded', function () {
     e.target.classList.toggle('has-value', !!e.target.value);
     loadAllTransactions();
   });
+
+  function goToTransactions(filterType, filterId) {
+    // Reset chip
+    _currentFilter = 'all';
+    $$('#tx-filters .chip').forEach(c => c.classList.toggle('active', c.dataset.filter === 'all'));
+
+    _filterAccountId  = filterType === 'account'  ? filterId : '';
+    _filterCategoryId = filterType === 'category' ? filterId : '';
+
+    const accSel = $('filter-account');
+    if (accSel) { accSel.value = _filterAccountId; accSel.classList.toggle('has-value', !!_filterAccountId); }
+    const catSel = $('filter-category');
+    if (catSel) { catSel.value = _filterCategoryId; catSel.classList.toggle('has-value', !!_filterCategoryId); }
+
+    navigateTo('transactions');
+    loadAllTransactions();
+    setTimeout(() => $('view-transactions')?.scrollTo(0, 0), 0);
+  }
 
   // ============================================================
   // 8. PRESUPUESTO — PERÍODO
@@ -842,6 +870,14 @@ document.addEventListener('DOMContentLoaded', function () {
         ]);
       });
     });
+
+    // Card click → go to Movimientos filtered by account
+    list.querySelectorAll('.account-card').forEach(card => {
+      const id = card.querySelector('.more-btn')?.dataset.acctid;
+      if (!id) return;
+      card.style.cursor = 'pointer';
+      card.addEventListener('click', () => goToTransactions('account', id));
+    });
   }
 
   function renderResumenCategories(categories) {
@@ -887,6 +923,14 @@ document.addEventListener('DOMContentLoaded', function () {
         e.stopPropagation();
         openCategoryActionSheet(btn.dataset.id, btn.dataset.name, btn.dataset.icon || '');
       });
+    });
+
+    // Row click → go to Movimientos filtered by category
+    list.querySelectorAll('.tx-group-item').forEach(item => {
+      const id = item.querySelector('.btn-cat-menu')?.dataset.id;
+      if (!id) return;
+      item.style.cursor = 'pointer';
+      item.addEventListener('click', () => goToTransactions('category', id));
     });
   }
 
@@ -1041,13 +1085,21 @@ document.addEventListener('DOMContentLoaded', function () {
   // ============================================================
   async function loadDashboard() {
     try {
-      const d     = await API.getDashboard();
-      const total = $('balance-total');
-      const inc   = $('balance-income');
-      const exp   = $('balance-expenses');
-      if (total) total.textContent = formatCOP(d.total);
-      if (inc)   inc.textContent   = formatCOP(d.monthly_income);
-      if (exp)   exp.textContent   = formatCOP(d.monthly_expenses);
+      const d        = await API.getDashboard();
+      const total    = $('balance-total');
+      const inc      = $('balance-income');
+      const exp      = $('balance-expenses');
+      const lbl      = $('balance-month-label');
+      const monthNet = $('balance-month-net');
+      if (total)    total.textContent    = formatCOP(d.total);
+      if (inc)      inc.textContent      = formatCOP(d.monthly_income);
+      if (exp)      exp.textContent      = formatCOP(d.monthly_expenses);
+      if (lbl)      lbl.textContent      = `Balance ${d.month_label || ''}`;
+      if (monthNet) {
+        const net = d.month_net || 0;
+        monthNet.textContent = (net >= 0 ? '+' : '') + formatCOP(net);
+        monthNet.className   = 'balance-month-net ' + (net >= 0 ? 'pos' : 'neg');
+      }
     } catch (e) { console.error('Error cargando dashboard:', e); }
   }
 
@@ -1280,8 +1332,9 @@ document.addEventListener('DOMContentLoaded', function () {
       const todayDay = now.getDate();
       const isThisMonth = (budgetYear === now.getFullYear() && budgetMonth === now.getMonth());
 
-      function payDayBadge(b) {
-        if (!b.pay_day) return '';
+      function statusBadge(b) {
+        if (b.fulfilled) return `<span class="pay-badge pay-done">✓ Cumplido</span>`;
+        if (!b.pay_day)  return '';
         const pct = b.amount > 0 ? b.spent / b.amount : 0;
         if (isThisMonth) {
           if (todayDay > b.pay_day) {
@@ -1296,11 +1349,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
       container.innerHTML = budgets.map(b => {
         const pct  = b.amount > 0 ? Math.min(Math.round(b.spent / b.amount * 100), 100) : 0;
-        const over = b.spent > b.amount;
-        const warn = !over && pct >= 80;
-        const barCls = over ? 'over' : (warn ? 'warn' : 'ok');
+        const over = !b.fulfilled && b.spent > b.amount;
+        const warn = !b.fulfilled && !over && pct >= 80;
+        const barCls = b.fulfilled ? 'ok' : (over ? 'over' : (warn ? 'warn' : 'ok'));
         const left = b.amount - b.spent;
-        return `<div class="budget-cat">
+        return `<div class="budget-cat${b.fulfilled ? ' budget-fulfilled' : ''}">
           <div class="budget-cat-header">
             <span class="budget-cat-icon">${b.category?.icon || '🏷️'}</span>
             <span class="budget-cat-name">${escHtml(b.category?.name || '—')}</span>
@@ -1308,12 +1361,13 @@ document.addEventListener('DOMContentLoaded', function () {
               data-budgetid="${b.id}"
               data-budgetamt="${b.amount}"
               data-budgetpayday="${b.pay_day || ''}"
+              data-budgetfulfilled="${b.fulfilled ? '1' : ''}"
               data-budgetname="${escHtml(b.category?.name || '—')}"
               aria-label="Opciones">···</button>
           </div>
-          ${payDayBadge(b)}
+          ${statusBadge(b)}
           <div class="budget-bar-wrap">
-            <div class="budget-bar ${barCls}" style="width:${pct}%"></div>
+            <div class="budget-bar ${barCls}" style="width:${b.fulfilled ? 100 : pct}%"></div>
           </div>
           <div class="budget-cat-footer">
             <span class="budget-spent">${formatCOP(b.spent)} gastado</span>
@@ -1325,12 +1379,17 @@ document.addEventListener('DOMContentLoaded', function () {
       // Wire ··· buttons
       container.querySelectorAll('.more-btn[data-budgetid]').forEach(btn => {
         btn.addEventListener('click', () => {
-          const id     = btn.dataset.budgetid;
-          const amt    = parseInt(btn.dataset.budgetamt, 10);
-          const payDay = btn.dataset.budgetpayday ? parseInt(btn.dataset.budgetpayday, 10) : null;
-          const name   = btn.dataset.budgetname;
+          const id        = btn.dataset.budgetid;
+          const amt       = parseInt(btn.dataset.budgetamt, 10);
+          const payDay    = btn.dataset.budgetpayday ? parseInt(btn.dataset.budgetpayday, 10) : null;
+          const fulfilled = btn.dataset.budgetfulfilled === '1';
+          const name      = btn.dataset.budgetname;
           openActionSheet(name, [
             { label: '✏️ Editar presupuesto', handler: () => openEditBudget(id, amt, payDay) },
+            {
+              label: fulfilled ? '↩️ Desmarcar cumplido' : '✅ Marcar como Cumplido',
+              handler: () => toggleBudgetFulfilled(id, !fulfilled),
+            },
             { label: '🗑️ Eliminar presupuesto', danger: true, handler: () =>
               confirmDelete('Eliminar presupuesto', async () => {
                 await API.deleteBudget(id);

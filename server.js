@@ -109,6 +109,20 @@ app.post('/api/accounts', async (req, res) => {
     .select()
     .single();
   if (error) return res.status(500).json({ error: error.message });
+
+  if (storedBalance !== 0) {
+    const today = new Date().toISOString().slice(0, 10);
+    await supabase.from('transactions').insert([{
+      user_id: uid,
+      account_id: data.id,
+      description: 'Saldo inicial',
+      amount: Math.abs(storedBalance),
+      type: storedBalance > 0 ? 'credit' : 'debit',
+      source: 'manual',
+      date: today,
+    }]);
+  }
+
   res.status(201).json(data);
 });
 
@@ -278,11 +292,13 @@ app.get('/api/dashboard', async (req, res) => {
   const [accRes, allTxRes, monthTxRes, allJeRes] = await Promise.all([
     supabase.from('accounts').select('id, type, initial_balance')
       .eq('user_id', uid).eq('active', true),
+    // Exclude PD for balance calculation (avoid double-counting partida doble)
     supabase.from('transactions').select('account_id, amount, type')
       .eq('user_id', uid).not('description', 'ilike', '%(PD%'),
+    // All transactions this month, excluding PD and "Saldo inicial" for income/expense
     supabase.from('transactions').select('amount, type')
       .eq('user_id', uid).gte('date', start).lte('date', end)
-      .not('description', 'ilike', '%(PD%'),
+      .not('description', 'eq', 'Saldo inicial'),
     supabase.from('journal_entries').select('account_id, amount, entry_type')
       .eq('user_id', uid),
   ]);
@@ -303,11 +319,15 @@ app.get('/api/dashboard', async (req, res) => {
 
   const personBalMap = {};
   accRes.data.filter(a => a.type === 'person').forEach(a => {
-    personBalMap[a.id] = a.initial_balance || 0; // include initial_balance for persons
+    personBalMap[a.id] = a.initial_balance || 0;
   });
   allJeRes.data.forEach(je => {
     if (personBalMap[je.account_id] !== undefined)
       personBalMap[je.account_id] += je.entry_type === 'credit' ? je.amount : -je.amount;
+  });
+  allTxRes.data.forEach(tx => {
+    if (personBalMap[tx.account_id] !== undefined)
+      personBalMap[tx.account_id] += tx.type === 'credit' ? tx.amount : -tx.amount;
   });
 
   let balance_banks = 0, balance_wallets = 0, balance_cash = 0, balance_credit = 0;
@@ -326,10 +346,15 @@ app.get('/api/dashboard', async (req, res) => {
     else if (tx.type === 'debit') monthly_expenses += tx.amount;
   });
 
+  const MONTHS_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const month_label = `${MONTHS_ES[now.getMonth()]} ${year}`;
+
+  const month_net = monthly_income - monthly_expenses;
+
   res.json({
     balance: total,
     balance_banks, balance_wallets, balance_cash, balance_credit, balance_persons,
-    total, monthly_income, monthly_expenses,
+    total, monthly_income, monthly_expenses, month_net, month_label,
     period: `${year}-${month}`,
   });
 });
@@ -363,12 +388,18 @@ app.get('/api/accounts/:id/balance', async (req, res) => {
   let balance = 0;
 
   if (accRes.data.type === 'person') {
-    balance = accRes.data.initial_balance || 0; // start from initial_balance
-    const jeRes = await supabase.from('journal_entries').select('amount, entry_type')
-      .eq('account_id', id).eq('user_id', uid);
+    balance = accRes.data.initial_balance || 0;
+    const [jeRes, txRes] = await Promise.all([
+      supabase.from('journal_entries').select('amount, entry_type').eq('account_id', id).eq('user_id', uid),
+      supabase.from('transactions').select('amount, type').eq('account_id', id).eq('user_id', uid),
+    ]);
     if (jeRes.error) return res.status(500).json({ error: jeRes.error.message });
+    if (txRes.error) return res.status(500).json({ error: txRes.error.message });
     jeRes.data.forEach(je => {
       balance += je.entry_type === 'credit' ? je.amount : -je.amount;
+    });
+    txRes.data.forEach(tx => {
+      balance += tx.type === 'credit' ? tx.amount : -tx.amount;
     });
   } else {
     const txRes = await supabase.from('transactions').select('amount, type')
@@ -439,6 +470,10 @@ app.get('/api/resumen', async (req, res) => {
   allJeRes.data.forEach(je => {
     if (personBalMap[je.account_id] === undefined) return;
     personBalMap[je.account_id] += je.entry_type === 'credit' ? je.amount : -je.amount;
+  });
+  allTxRes.data.forEach(tx => {
+    if (personBalMap[tx.account_id] === undefined) return;
+    personBalMap[tx.account_id] += tx.type === 'credit' ? tx.amount : -tx.amount;
   });
 
   const accounts = bankAccts.map(a => ({
@@ -576,6 +611,7 @@ app.get('/api/budgets', async (req, res) => {
     id: b.id, category_id: b.category_id, category: b.category,
     month: b.month, amount: b.amount, spent: spentMap[b.category_id] || 0,
     pay_day: b.pay_day || null,
+    fulfilled: b.fulfilled || false,
   }));
   res.json(result);
 });
@@ -597,12 +633,13 @@ app.post('/api/budgets', async (req, res) => {
 
 app.patch('/api/budgets/:id', async (req, res) => {
   const uid = req.user.id;
-  const { amount, pay_day } = req.body;
-  if (amount === undefined && pay_day === undefined)
-    return res.status(400).json({ error: 'Se requiere amount o pay_day' });
+  const { amount, pay_day, fulfilled } = req.body;
+  if (amount === undefined && pay_day === undefined && fulfilled === undefined)
+    return res.status(400).json({ error: 'Se requiere amount, pay_day o fulfilled' });
   const updates = {};
-  if (amount  !== undefined) updates.amount  = Math.round(amount);
-  if (pay_day !== undefined) updates.pay_day = pay_day ? parseInt(pay_day, 10) : null;
+  if (amount    !== undefined) updates.amount    = Math.round(amount);
+  if (pay_day   !== undefined) updates.pay_day   = pay_day ? parseInt(pay_day, 10) : null;
+  if (fulfilled !== undefined) updates.fulfilled = Boolean(fulfilled);
   const { data, error } = await supabase
     .from('budgets').update(updates)
     .eq('id', req.params.id).eq('user_id', uid)

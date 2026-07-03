@@ -322,6 +322,11 @@
       font-size: 34px; font-weight: 600; letter-spacing: -1px;
       margin-bottom: 16px; position: relative;
     }
+    .balance-divider { height: 1px; background: var(--border); margin: 14px 0 12px; opacity: .5; }
+    .balance-month-row { margin-bottom: 4px; }
+    .balance-month-net { font-family: var(--mono); font-size: 22px; font-weight: 600; margin-bottom: 12px; position: relative; }
+    .balance-month-net.pos { color: var(--income); }
+    .balance-month-net.neg { color: var(--expense); }
     .balance-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .balance-stat { display: flex; flex-direction: column; gap: 2px; }
     .balance-stat .stat-lbl { font-size: 11px; color: var(--text-muted); font-weight: 500; }
@@ -843,6 +848,10 @@
     /* Color picker active state */
     .color-opt.active { outline: 3px solid var(--accent); outline-offset: 2px; }
 
+    /* Fulfilled budget card */
+    .budget-fulfilled { opacity: 0.7; }
+    .budget-fulfilled .budget-bar { opacity: 0.5; }
+
     /* Pay-day badges in budget view */
     .pay-badge {
       display: inline-block; font-size: 11px; font-weight: 600;
@@ -1296,6 +1305,14 @@
       <div id="balance-card">
         <div id="balance-label">Balance Total</div>
         <div id="balance-total">$0.00</div>
+
+        <div class="balance-divider"></div>
+
+        <div class="balance-month-row">
+          <span id="balance-month-label" class="stat-lbl">Este mes</span>
+        </div>
+        <div id="balance-month-net" class="balance-month-net">$0</div>
+
         <div class="balance-stats">
           <div class="balance-stat">
             <span class="stat-lbl">↑ Ingresos</span>
