@@ -64,11 +64,14 @@ document.addEventListener('DOMContentLoaded', function () {
     setTimeout(() => el.remove(), 3200);
   }
 
-  function today() { return new Date().toISOString().slice(0, 10); }
+  function localDateStr(d) {
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  function today() { return localDateStr(new Date()); }
 
   function formatDateLabel(dateStr) {
     const t    = today();
-    const yest = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const yest = localDateStr(new Date(new Date().setDate(new Date().getDate() - 1)));
     if (dateStr === t)    return 'Hoy';
     if (dateStr === yest) return 'Ayer';
     const [y, m, d] = dateStr.split('-').map(Number);
@@ -101,6 +104,20 @@ document.addEventListener('DOMContentLoaded', function () {
     const hh   = String(dt.getHours()).padStart(2, '0');
     const min  = String(dt.getMinutes()).padStart(2, '0');
     return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+  }
+
+  // Convierte "YYYY-MM-DD" a "dd/mm/yyyy" sin conversión de zona horaria
+  function formatDateField(dateStr) {
+    if (!dateStr) return '';
+    const [y, m, d] = dateStr.split('-');
+    return `${d}/${m}/${y}`;
+  }
+
+  // Extrae hora local HH:MM de un timestamp ISO
+  function formatTimeLocal(isoString) {
+    if (!isoString) return '';
+    const dt = new Date(isoString);
+    return `${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`;
   }
 
   // ============================================================
@@ -1228,20 +1245,22 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!card) return;
     if (!txs.length) { card.style.display = 'none'; return; }
     card.style.display = '';
-    const income  = txs.filter(t => t.type === 'credit').reduce((s, t) => s + t.amount, 0);
-    const expense = txs.filter(t => t.type === 'debit').reduce((s, t) => s + t.amount, 0);
+    // Ingresos/Gastos excluyen "Saldo inicial"; Total incluye todo
+    const regular = txs.filter(t => t.description !== 'Saldo inicial');
+    const income  = regular.filter(t => t.type === 'credit').reduce((s, t) => s + t.amount, 0);
+    const expense = regular.filter(t => t.type === 'debit').reduce((s, t)  => s + t.amount, 0);
+    const total   = txs.reduce((s, t) => s + (t.type === 'credit' ? t.amount : -t.amount), 0);
     if (income > 0 && expense === 0) {
-      card.innerHTML = `<span class="tx-tc-lbl">Total:</span><span class="tx-tc-val pos">+${formatCOP(income)}</span>`;
+      card.innerHTML = `<span class="tx-tc-lbl">Ingresos:</span><span class="tx-tc-val pos">+${formatCOP(income)}</span>`;
     } else if (expense > 0 && income === 0) {
-      card.innerHTML = `<span class="tx-tc-lbl">Total:</span><span class="tx-tc-val neg">−${formatCOP(expense)}</span>`;
+      card.innerHTML = `<span class="tx-tc-lbl">Gastos:</span><span class="tx-tc-val neg">−${formatCOP(expense)}</span>`;
     } else {
-      const net = income - expense;
       card.innerHTML = `
-        <span class="tx-tc-item"><span class="tx-tc-lbl">↑</span><span class="tx-tc-val pos">${formatCOP(income)}</span></span>
+        <span class="tx-tc-item"><span class="tx-tc-lbl">Ingresos:</span><span class="tx-tc-val pos">${formatCOP(income)}</span></span>
         <span class="tx-tc-sep">·</span>
-        <span class="tx-tc-item"><span class="tx-tc-lbl">↓</span><span class="tx-tc-val neg">${formatCOP(expense)}</span></span>
+        <span class="tx-tc-item"><span class="tx-tc-lbl">Gastos:</span><span class="tx-tc-val neg">${formatCOP(expense)}</span></span>
         <span class="tx-tc-sep">·</span>
-        <span class="tx-tc-item"><span class="tx-tc-lbl">Total:</span><span class="tx-tc-val ${net >= 0 ? 'pos' : 'neg'}">${signedCOP(net)}</span></span>`;
+        <span class="tx-tc-item"><span class="tx-tc-lbl">Total:</span><span class="tx-tc-val ${total >= 0 ? 'pos' : 'neg'}">${signedCOP(total)}</span></span>`;
     }
   }
 
@@ -1281,7 +1300,7 @@ document.addEventListener('DOMContentLoaded', function () {
             <div class="tx-icon">${tx.category?.icon || '💸'}</div>
             <div class="tx-info">
               <div class="tx-name">${escHtml(tx.description)}</div>
-              <div class="tx-meta">${tx.account?.name || ''}${tx.category ? ' · ' + escHtml(tx.category.name) : ''} · ${formatDateTime(tx.created_at)}</div>
+              <div class="tx-meta">${tx.account?.name || ''}${tx.category ? ' · ' + escHtml(tx.category.name) : ''} · ${formatDateField(tx.date)} ${formatTimeLocal(tx.created_at)}</div>
               ${tx.notes ? `<div class="tx-notes">${escHtml(tx.notes)}</div>` : ''}
             </div>
             <div class="tx-amount ${cls}">${sign}${formatCOP(tx.amount)}</div>
