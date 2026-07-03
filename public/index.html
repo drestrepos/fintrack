@@ -247,6 +247,14 @@
     .type-toggle-btn.active[data-type="debit"]    { background: var(--expense);  color: #fff; }
     .type-toggle-btn.active[data-type="transfer"] { background: var(--transfer); color: #fff; }
 
+    /* Secondary button */
+    .btn-secondary {
+      padding: 13px; background: var(--surface2); color: var(--text);
+      border-radius: var(--radius-sm); border: none; font-size: 15px;
+      font-weight: 600; cursor: pointer; transition: opacity var(--t);
+    }
+    .btn-secondary:active { opacity: .7; }
+
     /* Primary button */
     .btn-primary {
       width: 100%; padding: 13px;
@@ -1978,6 +1986,64 @@
       </div>
 
       <button type="button" class="btn-primary" id="edit-category-submit">Guardar cambios</button>
+      <div style="height:16px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================
+     MODAL: EDITAR TRANSACCIÓN
+====================================================== -->
+<div class="modal-overlay-bg" id="modal-edit-tx-overlay">
+  <div class="modal-sheet" role="dialog" aria-label="Editar transacción">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <span class="modal-title">Editar transacción</span>
+      <button type="button" class="modal-close" id="edit-tx-close">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <div class="type-toggle" id="edit-tx-type-toggle">
+        <button type="button" class="type-toggle-btn active" data-type="debit">− Gasto</button>
+        <button type="button" class="type-toggle-btn" data-type="credit">+ Ingreso</button>
+      </div>
+
+      <div class="field"><div class="field-inner">
+        <span class="field-icon">✏️</span>
+        <input type="text" id="edit-tx-desc" class="field-input" placeholder="Descripción" autocomplete="off">
+      </div></div>
+
+      <div class="field"><div class="field-inner">
+        <span class="amount-prefix">$</span>
+        <input type="number" id="edit-tx-amount" class="field-input mono" placeholder="0.00" step="0.01" min="0" inputmode="decimal">
+      </div></div>
+
+      <div class="field"><div class="field-inner">
+        <span class="field-icon">📅</span>
+        <input type="date" id="edit-tx-date" class="field-input">
+      </div></div>
+
+      <div class="field"><div class="field-inner">
+        <select id="edit-tx-account" class="field-input">
+          <option value="">Seleccionar cuenta</option>
+        </select>
+      </div></div>
+
+      <div class="field"><div class="field-inner">
+        <select id="edit-tx-category" class="field-input">
+          <option value="">Sin categoría</option>
+        </select>
+      </div></div>
+
+      <div class="field"><div class="field-inner">
+        <span class="field-icon">📝</span>
+        <input type="text" id="edit-tx-notes" class="field-input" placeholder="Notas (opcional)" autocomplete="off">
+      </div></div>
+
+      <div style="display:flex;gap:8px;margin-top:4px;">
+        <button type="button" class="btn-secondary" id="edit-tx-cancel" style="flex:1;">Cancelar</button>
+        <button type="button" class="btn-primary" id="edit-tx-submit" style="flex:2;">Guardar cambios</button>
+      </div>
       <div style="height:16px;"></div>
     </div>
   </div>

@@ -1046,6 +1046,120 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
+  // ============================================================
+  // EDITAR TRANSACCIÓN — modal completo
+  // ============================================================
+  function openEditTxModal(tx) {
+    const overlay = $('modal-edit-tx-overlay');
+    if (!overlay) return;
+    overlay._editId = tx.id;
+
+    // Type toggle
+    const toggle = $('edit-tx-type-toggle');
+    if (toggle) {
+      toggle.querySelectorAll('.type-toggle-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.type === tx.type);
+      });
+    }
+
+    // Fields
+    const descInp = $('edit-tx-desc');    if (descInp)    descInp.value    = tx.description || '';
+    const amtInp  = $('edit-tx-amount');  if (amtInp)     amtInp.value     = tx.amount ? (tx.amount / 100).toFixed(2) : '';
+    const dateInp = $('edit-tx-date');    if (dateInp)    dateInp.value    = tx.date || '';
+    const notesInp = $('edit-tx-notes'); if (notesInp)   notesInp.value   = tx.notes || '';
+
+    // Account select
+    const accSel = $('edit-tx-account');
+    if (accSel) {
+      accSel.innerHTML = '<option value="">Seleccionar cuenta</option>';
+      (_cachedAccounts || []).forEach(a => {
+        const opt = document.createElement('option');
+        opt.value = a.id;
+        opt.textContent = `${a.icon || '🏦'} ${a.name}`;
+        opt.selected = a.id === tx.account_id;
+        accSel.appendChild(opt);
+      });
+    }
+
+    // Category select
+    const catSel = $('edit-tx-category');
+    if (catSel) {
+      catSel.innerHTML = '<option value="">Sin categoría</option>';
+      (_cachedCategories || []).forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = `${c.icon || '🏷️'} ${c.name}`;
+        opt.selected = c.id === tx.category_id;
+        catSel.appendChild(opt);
+      });
+    }
+
+    overlay.classList.add('open');
+  }
+
+  function initEditTxModal() {
+    const overlay   = $('modal-edit-tx-overlay');
+    if (!overlay) return;
+    const closeBtn  = $('edit-tx-close');
+    const cancelBtn = $('edit-tx-cancel');
+    const submitBtn = $('edit-tx-submit');
+    const toggle    = $('edit-tx-type-toggle');
+
+    function closeModal() { overlay.classList.remove('open'); }
+
+    closeBtn?.addEventListener('click', closeModal);
+    cancelBtn?.addEventListener('click', closeModal);
+    overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+
+    // Type toggle
+    toggle?.querySelectorAll('.type-toggle-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        toggle.querySelectorAll('.type-toggle-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+
+    submitBtn?.addEventListener('click', async () => {
+      const txId = overlay._editId;
+      if (!txId) return;
+      const desc  = $('edit-tx-desc')?.value.trim();
+      const amt   = parseFloat($('edit-tx-amount')?.value || '0');
+      const type  = toggle?.querySelector('.type-toggle-btn.active')?.dataset.type || 'debit';
+      const date  = $('edit-tx-date')?.value;
+      const accId = $('edit-tx-account')?.value;
+      const catId = $('edit-tx-category')?.value;
+      const notes = $('edit-tx-notes')?.value.trim();
+
+      if (!desc)  { showToast('Escribe una descripción', 'error'); return; }
+      if (!amt || amt <= 0) { showToast('Ingresa un monto válido', 'error'); return; }
+      if (!accId) { showToast('Selecciona una cuenta', 'error'); return; }
+
+      submitBtn.textContent = 'Guardando…'; submitBtn.disabled = true;
+      try {
+        await API.updateTransaction(txId, {
+          description: desc,
+          amount: Math.round(amt * 100),
+          type,
+          date: date || undefined,
+          account_id: accId,
+          category_id: catId || null,
+          notes: notes || null,
+        });
+        showToast('Transacción actualizada ✓', 'success');
+        closeModal();
+        invalidateTxCache();
+        loadAllTransactions();
+        loadTransactions();
+        loadDashboard();
+        loadResumen();
+      } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+      } finally {
+        submitBtn.textContent = 'Guardar cambios'; submitBtn.disabled = false;
+      }
+    });
+  }
+
   function confirmDeleteCategory(id, name) {
     if (!window.confirm(`¿Eliminar la categoría "${name}"? Esta acción no se puede deshacer.`)) return;
     API.deleteCategory(id)
@@ -1328,8 +1442,9 @@ document.addEventListener('DOMContentLoaded', function () {
       if (!btn) return;
       const txId   = btn.dataset.txid;
       const txDesc = btn.dataset.txdesc;
+      const tx = (_txCache || []).find(t => t.id === txId);
       openActionSheet(txDesc, [
-        { label: '✏️ Editar descripción', handler: () => openEditTransaction(txId, txDesc) },
+        { label: '✏️ Editar', handler: () => { if (tx) openEditTxModal(tx); } },
         { label: '🗑️ Eliminar', danger: true, handler: () =>
           confirmDelete('Eliminar transacción', async () => {
             // Delete PD secondary transactions linked to this one
@@ -1816,6 +1931,7 @@ document.addEventListener('DOMContentLoaded', function () {
   // ============================================================
   initAddCategoryModal();
   initEditCategoryModal();
+  initEditTxModal();
   initAddAccountModal();
   initAddBudgetModal();
   initTxActions();

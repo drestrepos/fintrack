@@ -257,9 +257,19 @@ app.post('/api/transactions', async (req, res) => {
 
 app.patch('/api/transactions/:id', async (req, res) => {
   const uid = req.user.id;
+  const { description, amount, type, date, account_id, category_id, notes } = req.body;
   const updates = {};
-  if (req.body.description !== undefined) updates.description = req.body.description;
-  if (req.body.notes       !== undefined) updates.notes       = req.body.notes;
+  if (description !== undefined) updates.description = description;
+  if (amount      !== undefined) updates.amount      = Math.round(amount);
+  if (type        !== undefined) updates.type        = type;
+  if (date        !== undefined) updates.date        = date;
+  if (account_id  !== undefined) updates.account_id  = account_id;
+  if (notes       !== undefined) updates.notes       = notes || null;
+  // category_id can be explicitly set to null to remove it
+  if (Object.prototype.hasOwnProperty.call(req.body, 'category_id')) {
+    updates.category_id = category_id || null;
+  }
+  if (!Object.keys(updates).length) return res.status(400).json({ error: 'Sin campos a actualizar' });
   const { data, error } = await supabase
     .from('transactions').update(updates)
     .eq('id', req.params.id).eq('user_id', uid)
