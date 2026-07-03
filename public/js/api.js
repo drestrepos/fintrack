@@ -50,7 +50,7 @@ const API = (() => {
 
     // TRANSACCIONES
     getTransactions:   (limit) => request('GET',    `/transactions?limit=${limit || 20}`),
-    getAllTransactions: ()      => request('GET',    '/transactions/all'),
+    getAllTransactions: (month) => request('GET',    `/transactions/all${month ? '?month=' + month : ''}`),
     createTransaction: (data)  => request('POST',   '/transactions', data),
     updateTransaction: (id, data) => request('PATCH', `/transactions/${id}`, data),
     deleteTransaction: (id)    => request('DELETE', `/transactions/${id}`),

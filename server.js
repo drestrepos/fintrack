@@ -289,55 +289,38 @@ app.get('/api/dashboard', async (req, res) => {
   const lastDay = new Date(year, now.getMonth() + 1, 0).getDate();
   const end     = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
 
-  const [accRes, allTxRes, monthTxRes, allJeRes] = await Promise.all([
-    supabase.from('accounts').select('id, type, initial_balance')
+  const [accRes, allTxRes, monthTxRes] = await Promise.all([
+    supabase.from('accounts').select('id, type')
       .eq('user_id', uid).eq('active', true),
-    // Exclude PD for balance calculation (avoid double-counting partida doble)
+    // REGLA 1: todas las transacciones para calcular saldo real (bank, wallet, cash, credit, person)
     supabase.from('transactions').select('account_id, amount, type')
-      .eq('user_id', uid).not('description', 'ilike', '%(PD%'),
-    // All transactions this month, excluding PD and "Saldo inicial" for income/expense
+      .eq('user_id', uid),
+    // REGLA 2: ingresos/gastos del mes — excluir 'Saldo inicial'
     supabase.from('transactions').select('amount, type')
       .eq('user_id', uid).gte('date', start).lte('date', end)
       .not('description', 'eq', 'Saldo inicial'),
-    supabase.from('journal_entries').select('account_id, amount, entry_type')
-      .eq('user_id', uid),
   ]);
 
   if (accRes.error)     return res.status(500).json({ error: accRes.error.message });
   if (allTxRes.error)   return res.status(500).json({ error: allTxRes.error.message });
   if (monthTxRes.error) return res.status(500).json({ error: monthTxRes.error.message });
-  if (allJeRes.error)   return res.status(500).json({ error: allJeRes.error.message });
 
+  // REGLA 1: balance = sum(credits) - sum(debits) desde 0, solo transactions
   const balMap = {};
-  accRes.data.forEach(a => {
-    if (a.type !== 'person') balMap[a.id] = { type: a.type, balance: a.initial_balance || 0 };
-  });
+  accRes.data.forEach(a => { balMap[a.id] = { type: a.type, balance: 0 }; });
   allTxRes.data.forEach(tx => {
     if (balMap[tx.account_id] !== undefined)
       balMap[tx.account_id].balance += tx.type === 'credit' ? tx.amount : -tx.amount;
   });
 
-  const personBalMap = {};
-  accRes.data.filter(a => a.type === 'person').forEach(a => {
-    personBalMap[a.id] = a.initial_balance || 0;
-  });
-  allJeRes.data.forEach(je => {
-    if (personBalMap[je.account_id] !== undefined)
-      personBalMap[je.account_id] += je.entry_type === 'credit' ? je.amount : -je.amount;
-  });
-  allTxRes.data.forEach(tx => {
-    if (personBalMap[tx.account_id] !== undefined)
-      personBalMap[tx.account_id] += tx.type === 'credit' ? tx.amount : -tx.amount;
-  });
-
-  let balance_banks = 0, balance_wallets = 0, balance_cash = 0, balance_credit = 0;
+  let balance_banks = 0, balance_wallets = 0, balance_cash = 0, balance_credit = 0, balance_persons = 0;
   Object.values(balMap).forEach(({ type, balance }) => {
     if (type === 'bank')   balance_banks   += balance;
     if (type === 'wallet') balance_wallets += balance;
     if (type === 'cash')   balance_cash    += balance;
     if (type === 'credit') balance_credit  += balance;
+    if (type === 'person') balance_persons += balance;
   });
-  const balance_persons = Object.values(personBalMap).reduce((s, v) => s + v, 0);
   const total = balance_banks + balance_wallets + balance_cash + balance_credit + balance_persons;
 
   let monthly_income = 0, monthly_expenses = 0;
@@ -364,12 +347,20 @@ app.get('/api/dashboard', async (req, res) => {
 // ============================================================
 app.get('/api/transactions/all', async (req, res) => {
   const uid = req.user.id;
-  const { data, error } = await supabase
+  const raw = req.query.month;
+  let query = supabase
     .from('transactions')
     .select('*, account:accounts(id,name,icon), category:categories(id,name,icon)')
-    .eq('user_id', uid)
-    .order('date', { ascending: false })
-    .order('created_at', { ascending: false });
+    .eq('user_id', uid);
+  if (raw && /^\d{4}-\d{2}$/.test(raw)) {
+    const [y, m] = raw.split('-').map(Number);
+    const lastDay = new Date(y, m, 0).getDate();
+    query = query
+      .gte('date', `${raw}-01`)
+      .lte('date', `${raw}-${String(lastDay).padStart(2, '0')}`);
+  }
+  query = query.order('date', { ascending: false }).order('created_at', { ascending: false });
+  const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 });
@@ -382,35 +373,18 @@ app.get('/api/accounts/:id/balance', async (req, res) => {
   const { id } = req.params;
 
   const accRes = await supabase.from('accounts')
-    .select('initial_balance, type').eq('id', id).eq('user_id', uid).single();
+    .select('type').eq('id', id).eq('user_id', uid).single();
   if (accRes.error) return res.status(500).json({ error: accRes.error.message });
 
   let balance = 0;
 
-  if (accRes.data.type === 'person') {
-    balance = accRes.data.initial_balance || 0;
-    const [jeRes, txRes] = await Promise.all([
-      supabase.from('journal_entries').select('amount, entry_type').eq('account_id', id).eq('user_id', uid),
-      supabase.from('transactions').select('amount, type').eq('account_id', id).eq('user_id', uid),
-    ]);
-    if (jeRes.error) return res.status(500).json({ error: jeRes.error.message });
-    if (txRes.error) return res.status(500).json({ error: txRes.error.message });
-    jeRes.data.forEach(je => {
-      balance += je.entry_type === 'credit' ? je.amount : -je.amount;
-    });
-    txRes.data.forEach(tx => {
-      balance += tx.type === 'credit' ? tx.amount : -tx.amount;
-    });
-  } else {
-    const txRes = await supabase.from('transactions').select('amount, type')
-      .eq('account_id', id).eq('user_id', uid)
-      .not('description', 'ilike', '%(PD%');
-    if (txRes.error) return res.status(500).json({ error: txRes.error.message });
-    balance = accRes.data.initial_balance || 0;
-    txRes.data.forEach(tx => {
-      balance += tx.type === 'credit' ? tx.amount : -tx.amount;
-    });
-  }
+  // REGLA 1: balance = sum(credits) - sum(debits) de todas las transactions (sin journal_entries)
+  const txRes = await supabase.from('transactions').select('amount, type')
+    .eq('account_id', id).eq('user_id', uid);
+  if (txRes.error) return res.status(500).json({ error: txRes.error.message });
+  txRes.data.forEach(tx => {
+    balance += tx.type === 'credit' ? tx.amount : -tx.amount;
+  });
 
   res.json({ balance });
 });
@@ -435,17 +409,15 @@ app.get('/api/resumen', async (req, res) => {
   const lastDay = new Date(year, monthNum, 0).getDate();
   const end     = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
 
-  const [accRes, allTxRes, monthTxRes, allJeRes, catRes] = await Promise.all([
+  const [accRes, allTxRes, monthTxRes, catRes] = await Promise.all([
     supabase.from('accounts').select('*')
       .eq('user_id', uid).eq('active', true).order('name'),
-    // All transactions for per-account balance — PD transactions are real movements in each account
+    // REGLA 1: todas las transacciones para calcular saldo real (todas las cuentas)
     supabase.from('transactions').select('account_id, amount, type')
       .eq('user_id', uid),
     supabase.from('transactions')
       .select('category_id, amount, type')
       .eq('user_id', uid).gte('date', start).lte('date', end),
-    supabase.from('journal_entries').select('account_id, amount, entry_type')
-      .eq('user_id', uid),
     supabase.from('categories').select('id, name, icon, color')
       .eq('user_id', uid).order('name'),
   ]);
@@ -453,29 +425,18 @@ app.get('/api/resumen', async (req, res) => {
   if (accRes.error)     return res.status(500).json({ error: accRes.error.message });
   if (allTxRes.error)   return res.status(500).json({ error: allTxRes.error.message });
   if (monthTxRes.error) return res.status(500).json({ error: monthTxRes.error.message });
-  if (allJeRes.error)   return res.status(500).json({ error: allJeRes.error.message });
   if (catRes.error)     return res.status(500).json({ error: catRes.error.message });
 
-  const bankAccts   = accRes.data.filter(a => a.type !== 'person');
-  const personAccts = accRes.data.filter(a => a.type === 'person');
-
+  // REGLA 1: balance = sum(credits) - sum(debits) desde 0, solo transactions
   const balMap = {};
-  bankAccts.forEach(a => { balMap[a.id] = a.initial_balance || 0; });
+  accRes.data.forEach(a => { balMap[a.id] = 0; });
   allTxRes.data.forEach(tx => {
     if (balMap[tx.account_id] === undefined) return;
     balMap[tx.account_id] += tx.type === 'credit' ? tx.amount : -tx.amount;
   });
 
-  const personBalMap = {};
-  personAccts.forEach(a => { personBalMap[a.id] = a.initial_balance || 0; });
-  allJeRes.data.forEach(je => {
-    if (personBalMap[je.account_id] === undefined) return;
-    personBalMap[je.account_id] += je.entry_type === 'credit' ? je.amount : -je.amount;
-  });
-  allTxRes.data.forEach(tx => {
-    if (personBalMap[tx.account_id] === undefined) return;
-    personBalMap[tx.account_id] += tx.type === 'credit' ? tx.amount : -tx.amount;
-  });
+  const bankAccts   = accRes.data.filter(a => a.type !== 'person');
+  const personAccts = accRes.data.filter(a => a.type === 'person');
 
   const accounts = bankAccts.map(a => ({
     id: a.id, name: a.name, icon: a.icon, type: a.type,
@@ -483,7 +444,7 @@ app.get('/api/resumen', async (req, res) => {
   }));
   const persons = personAccts.map(a => ({
     id: a.id, name: a.name, icon: a.icon, type: 'person',
-    balance: personBalMap[a.id] || 0,
+    balance: balMap[a.id] || 0,
   }));
 
   const balance_banks   = accounts.filter(a => a.type === 'bank').reduce((s, a) => s + a.balance, 0);

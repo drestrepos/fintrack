@@ -643,6 +643,7 @@ document.addEventListener('DOMContentLoaded', function () {
         invalidateTxCache();
         loadAllTransactions();
         loadTransactions();
+        loadDashboard();
       } catch (err) { showToast('Error: ' + err.message, 'error'); }
     });
   }
@@ -759,6 +760,28 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // ============================================================
   // 9. RESUMEN — PERÍODO + CARGA
+  // ============================================================
+  // MOVIMIENTOS — selector de mes
+  // ============================================================
+  let txMonth = new Date().getMonth(); // 0-indexed
+  let txYear  = new Date().getFullYear();
+
+  function renderTxPeriod() {
+    const lbl = $('tx-period-label');
+    if (lbl) lbl.textContent = `${MONTHS[txMonth]} ${txYear}`;
+  }
+
+  $('tx-prev') && $('tx-prev').addEventListener('click', () => {
+    if (--txMonth < 0) { txMonth = 11; txYear--; }
+    renderTxPeriod(); invalidateTxCache(); loadAllTransactions();
+  });
+  $('tx-next') && $('tx-next').addEventListener('click', () => {
+    if (++txMonth > 11) { txMonth = 0; txYear++; }
+    renderTxPeriod(); invalidateTxCache(); loadAllTransactions();
+  });
+
+  renderTxPeriod();
+
   // ============================================================
   let resumenMonth = new Date().getMonth(); // 0-indexed
   let resumenYear  = new Date().getFullYear();
@@ -1200,9 +1223,31 @@ document.addEventListener('DOMContentLoaded', function () {
   // ============================================================
   function invalidateTxCache() { _txCache = null; }
 
+  function renderTxTotalCard(txs) {
+    const card = $('tx-total-card');
+    if (!card) return;
+    if (!txs.length) { card.style.display = 'none'; return; }
+    card.style.display = '';
+    const income  = txs.filter(t => t.type === 'credit').reduce((s, t) => s + t.amount, 0);
+    const expense = txs.filter(t => t.type === 'debit').reduce((s, t) => s + t.amount, 0);
+    if (income > 0 && expense === 0) {
+      card.innerHTML = `<span class="tx-tc-lbl">Total:</span><span class="tx-tc-val pos">+${formatCOP(income)}</span>`;
+    } else if (expense > 0 && income === 0) {
+      card.innerHTML = `<span class="tx-tc-lbl">Total:</span><span class="tx-tc-val neg">−${formatCOP(expense)}</span>`;
+    } else {
+      const net = income - expense;
+      card.innerHTML = `
+        <span class="tx-tc-item"><span class="tx-tc-lbl">↑</span><span class="tx-tc-val pos">${formatCOP(income)}</span></span>
+        <span class="tx-tc-sep">·</span>
+        <span class="tx-tc-item"><span class="tx-tc-lbl">↓</span><span class="tx-tc-val neg">${formatCOP(expense)}</span></span>
+        <span class="tx-tc-sep">·</span>
+        <span class="tx-tc-item"><span class="tx-tc-lbl">Total:</span><span class="tx-tc-val ${net >= 0 ? 'pos' : 'neg'}">${signedCOP(net)}</span></span>`;
+    }
+  }
+
   async function loadAllTransactions() {
     try {
-      if (!_txCache) _txCache = await API.getAllTransactions();
+      if (!_txCache) _txCache = await API.getAllTransactions(monthKey(txYear, txMonth));
 
       let txs = _txCache;
       if (_currentFilter === 'income')   txs = txs.filter(t => t.type === 'credit');
@@ -1210,6 +1255,8 @@ document.addEventListener('DOMContentLoaded', function () {
       if (_currentFilter === 'transfer') txs = txs.filter(t => t.description.includes('(PD '));
       if (_filterAccountId)              txs = txs.filter(t => t.account_id  === _filterAccountId);
       if (_filterCategoryId)             txs = txs.filter(t => t.category_id === _filterCategoryId);
+
+      renderTxTotalCard(txs);
 
       const list = $('tx-list-full');
       if (!list) return;
@@ -1277,6 +1324,7 @@ document.addEventListener('DOMContentLoaded', function () {
             loadDashboard();
             loadTransactions();
             loadAllTransactions();
+            loadResumen();
             showToast('Transacción eliminada', 'success');
           })
         },

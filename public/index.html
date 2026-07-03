@@ -449,6 +449,18 @@
       display: grid; grid-template-columns: 1fr 1fr;
       gap: 8px; margin-bottom: 14px;
     }
+    #tx-total-card {
+      background: var(--surface2); border-radius: 10px;
+      padding: 10px 14px; margin-bottom: 14px;
+      display: flex; align-items: center; gap: 12px;
+      flex-wrap: wrap; font-family: var(--mono); font-size: 13px;
+    }
+    .tx-tc-item { display: flex; align-items: center; gap: 4px; }
+    .tx-tc-sep  { color: var(--border); }
+    .tx-tc-lbl  { color: var(--text-muted); margin-right: 2px; }
+    .tx-tc-val  { font-weight: 600; }
+    .tx-tc-val.pos { color: var(--income); }
+    .tx-tc-val.neg { color: var(--expense); }
     .filter-select {
       padding: 6px 10px;
       border-radius: 20px;
@@ -1410,6 +1422,16 @@
     <!-- ====== VISTA: MOVIMIENTOS ====== -->
     <section id="view-transactions" class="view">
 
+      <div class="budget-summary" style="margin-bottom:12px;">
+        <div class="budget-period-row">
+          <span id="tx-period-label">Julio 2026</span>
+          <div class="budget-nav">
+            <button type="button" class="period-btn" id="tx-prev">‹</button>
+            <button type="button" class="period-btn" id="tx-next">›</button>
+          </div>
+        </div>
+      </div>
+
       <div class="filter-row" id="tx-filters">
         <button type="button" class="chip active" data-filter="all">Todos</button>
         <button type="button" class="chip" data-filter="income">Ingresos</button>
@@ -1424,6 +1446,8 @@
           <option value="">Todas las categorías</option>
         </select>
       </div>
+
+      <div id="tx-total-card" style="display:none;"></div>
 
       <div id="tx-list-full">
         <!-- Ejemplo — JS reemplaza -->
@@ -1485,7 +1509,7 @@
 
       <!-- Balance card -->
       <div id="resumen-balance-card">
-        <div class="rbc-label">Patrimonio Total</div>
+        <div class="rbc-label">Balance Total</div>
         <div class="rbc-total" id="resumen-balance-total">$0</div>
         <div class="rbc-grid">
           <div class="rbc-item">
