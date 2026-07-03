@@ -438,8 +438,9 @@ app.get('/api/resumen', async (req, res) => {
   const [accRes, allTxRes, monthTxRes, allJeRes, catRes] = await Promise.all([
     supabase.from('accounts').select('*')
       .eq('user_id', uid).eq('active', true).order('name'),
+    // All transactions for per-account balance — PD transactions are real movements in each account
     supabase.from('transactions').select('account_id, amount, type')
-      .eq('user_id', uid).not('description', 'ilike', '%(PD%'),
+      .eq('user_id', uid),
     supabase.from('transactions')
       .select('category_id, amount, type')
       .eq('user_id', uid).gte('date', start).lte('date', end),

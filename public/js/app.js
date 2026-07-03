@@ -47,6 +47,13 @@ document.addEventListener('DOMContentLoaded', function () {
     return '$' + Math.round(centavos / 100).toLocaleString('es-CO');
   }
 
+  // Returns e.g. "$150,000" or "-$50,000" — always explicit sign for negatives
+  function signedCOP(centavos) {
+    return centavos < 0
+      ? '-' + formatCOP(Math.abs(centavos))
+      : formatCOP(centavos);
+  }
+
   function showToast(msg, type = 'success') {
     const c = $('toast-container');
     if (!c) return;
@@ -786,11 +793,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function renderResumenBalanceCard(data) {
     const totalEl = $('resumen-balance-total');
-    if (totalEl) totalEl.textContent = formatCOP(data.net_total || 0);
+    if (totalEl) totalEl.textContent = signedCOP(data.net_total || 0);
 
-    // credit: balance is negative (= debt). Show absolute value, always red.
-    // person: positive = te deben (green), negative = les debes (red). Show abs value.
-    // bank/wallet/cash: positive = asset (green), negative = overdraft (red). Show abs value.
+    // credit: always negative (liability). person/asset: sign follows balance value.
     const typeMap = {
       'resumen-bal-banks':   { val: data.balance_banks   || 0, mode: 'asset'  },
       'resumen-bal-wallets': { val: data.balance_wallets || 0, mode: 'asset'  },
@@ -801,13 +806,8 @@ document.addEventListener('DOMContentLoaded', function () {
     Object.entries(typeMap).forEach(([id, { val, mode }]) => {
       const el = $(id);
       if (!el) return;
-      el.textContent = formatCOP(Math.abs(val));
-      let cls;
-      if (mode === 'credit') {
-        cls = 'neg'; // credit is always a liability
-      } else {
-        cls = val >= 0 ? 'pos' : 'neg';
-      }
+      el.textContent = signedCOP(val);
+      const cls = (mode === 'credit' || val < 0) ? 'neg' : 'pos';
       el.className = 'rbc-val ' + cls;
     });
   }
@@ -831,7 +831,7 @@ document.addEventListener('DOMContentLoaded', function () {
       // asset: red only if overdraft (negative)
       const isCredit = a.type === 'credit';
       const neg      = (isCredit || a.balance < 0) ? ' neg' : '';
-      const dispBal  = formatCOP(isCredit ? Math.abs(a.balance) : a.balance);
+      const dispBal  = signedCOP(a.balance);
       return `<div class="account-card">
         <div class="account-icon ${meta.cls}">${escHtml(a.icon || meta.emoji)}</div>
         <div class="account-info">
@@ -1117,7 +1117,7 @@ document.addEventListener('DOMContentLoaded', function () {
       _cachedCategories.forEach(c => {
         const opt = document.createElement('option');
         opt.value = c.id;
-        opt.textContent = `${c.icon || ''} ${c.name}`;
+        opt.textContent = `${c.icon || '🏷️'} ${c.name}`;
         sel.appendChild(opt);
       });
       if (isFilter && _filterCategoryId) sel.value = _filterCategoryId;
@@ -1529,7 +1529,7 @@ document.addEventListener('DOMContentLoaded', function () {
       _cachedCategories.forEach(c => {
         const opt = document.createElement('option');
         opt.value = c.id;
-        opt.textContent = `${c.icon || ''} ${c.name}`;
+        opt.textContent = `${c.icon || '🏷️'} ${c.name}`;
         catSel.appendChild(opt);
       });
     }
