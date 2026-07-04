@@ -1173,23 +1173,67 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function initAddCategoryModal() {
-    const overlay  = $('modal-add-category-overlay');
+    const overlay    = $('modal-add-category-overlay');
     if (!overlay) return;
-    const closeBtn = $('add-category-close');
-    const nameInp  = $('add-category-name');
-    const submitBtn = $('add-category-submit');
+    const closeBtn   = $('add-category-close');
+    const nameInp    = $('add-category-name');
+    const submitBtn  = $('add-category-submit');
     const iconPicker = $('add-category-icon-picker');
-    const colorPicker = $('add-category-color-picker');
-    let selectedIcon  = '📁';
-    let selectedColor = '#607d8b';
+    const presetSec  = $('add-cat-preset-section');
+    const presetGrid = $('add-cat-preset-grid');
+    let selectedIcon = '📁';
+
+    const DEFAULT_CATS = [
+      { name: 'Mercado',         icon: '🛒', color: '#4caf50' },
+      { name: 'Comida',          icon: '🍕', color: '#f44336' },
+      { name: 'Transporte',      icon: '🚗', color: '#ff9800' },
+      { name: 'Servicios',       icon: '💡', color: '#2196f3' },
+      { name: 'Salud',           icon: '🏥', color: '#e91e63' },
+      { name: 'Viajes',          icon: '✈️', color: '#009688' },
+      { name: 'Entretenimiento', icon: '🎬', color: '#9c27b0' },
+      { name: 'Ropa',            icon: '👕', color: '#673ab7' },
+      { name: 'Educación',       icon: '📚', color: '#3f51b5' },
+      { name: 'Gastos apto',     icon: '🏠', color: '#795548' },
+      { name: 'Sueldo',          icon: '💼', color: '#1d9e75' },
+      { name: 'Otros',           icon: '📦', color: '#607d8b' },
+    ];
+
+    function getMissingPresets() {
+      const existing = new Set((_cachedCategories || []).map(c => c.name.toLowerCase()));
+      return DEFAULT_CATS.filter(dc => !existing.has(dc.name.toLowerCase()));
+    }
+
+    function renderPresets() {
+      if (!presetGrid || !presetSec) return;
+      const missing = getMissingPresets();
+      presetSec.style.display = missing.length ? '' : 'none';
+      presetGrid.innerHTML = missing.map(cat =>
+        `<button type="button" class="cat-preset-chip" data-name="${escHtml(cat.name)}" data-icon="${cat.icon}" data-color="${cat.color}">
+          <span class="chip-icon">${cat.icon}</span><span>${escHtml(cat.name)}</span>
+        </button>`
+      ).join('');
+      presetGrid.querySelectorAll('.cat-preset-chip').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          btn.disabled = true;
+          try {
+            await API.createCategory({ name: btn.dataset.name, icon: btn.dataset.icon, color: btn.dataset.color });
+            showToast(`${btn.dataset.icon} ${btn.dataset.name} agregada ✓`);
+            await loadCategories();
+            await loadResumen();
+            renderPresets();
+          } catch (err) {
+            showToast('Error: ' + err.message, 'error');
+            btn.disabled = false;
+          }
+        });
+      });
+    }
 
     function openModal() {
       if (nameInp) nameInp.value = '';
-      // Highlight first icon/color
       iconPicker?.querySelectorAll('.icon-opt').forEach((el, i) => el.classList.toggle('active', i === 0));
-      colorPicker?.querySelectorAll('.color-opt').forEach((el, i) => el.classList.toggle('active', i === 0));
-      if (iconPicker) selectedIcon = iconPicker.querySelector('.icon-opt')?.dataset.icon || '📁';
-      if (colorPicker) selectedColor = colorPicker.querySelector('.color-opt')?.dataset.color || '#607d8b';
+      selectedIcon = iconPicker?.querySelector('.icon-opt')?.dataset.icon || '📁';
+      renderPresets();
       overlay.classList.add('open');
       nameInp?.focus();
     }
@@ -1208,28 +1252,21 @@ document.addEventListener('DOMContentLoaded', function () {
       });
     });
 
-    colorPicker?.querySelectorAll('.color-opt').forEach(opt => {
-      opt.addEventListener('click', () => {
-        colorPicker.querySelectorAll('.color-opt').forEach(o => o.classList.remove('active'));
-        opt.classList.add('active');
-        selectedColor = opt.dataset.color;
-      });
-    });
-
     submitBtn?.addEventListener('click', async () => {
       const name = nameInp?.value.trim();
       if (!name) { showToast('Escribe un nombre para la categoría', 'error'); return; }
-      submitBtn.textContent = 'Guardando…'; submitBtn.disabled = true;
+      submitBtn.textContent = 'Creando…'; submitBtn.disabled = true;
       try {
-        await API.createCategory({ name, icon: selectedIcon, color: selectedColor });
+        await API.createCategory({ name, icon: selectedIcon, color: '#607d8b' });
         showToast('Categoría creada ✓');
-        closeModal();
+        if (nameInp) nameInp.value = '';
         await loadCategories();
-        await loadResumen(resumenYear, resumenMonth);
+        await loadResumen();
+        renderPresets();
       } catch (err) {
         showToast('Error: ' + err.message, 'error');
       } finally {
-        submitBtn.textContent = 'Guardar'; submitBtn.disabled = false;
+        submitBtn.textContent = 'Crear'; submitBtn.disabled = false;
       }
     });
   }
