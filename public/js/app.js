@@ -924,39 +924,28 @@ document.addEventListener('DOMContentLoaded', function () {
     const list = $('resumen-categories-list');
     if (!list) return;
 
-    if (!categories.length) {
+    const active = categories.filter(c => c.income > 0 || c.expense > 0 || c.total !== 0);
+
+    if (!active.length) {
       list.innerHTML = `<div class="empty-state"><div class="empty-icon">🏷️</div>
-        <div class="empty-title">No hay categorías</div></div>`;
+        <div class="empty-title">Sin movimientos este mes</div></div>`;
       return;
     }
 
-    const active  = categories.filter(c => c.income > 0 || c.expense > 0);
-    const inactive = categories.filter(c => c.income === 0 && c.expense === 0);
-
     function catRow(cat) {
-      const hasActivity = cat.income > 0 || cat.expense > 0;
-      const cls  = !hasActivity ? 'muted' : (cat.total >= 0 ? 'income' : 'expense');
+      const cls  = cat.total >= 0 ? 'income' : 'expense';
       const sign = cat.total > 0 ? '+' : '';
-      const amt  = hasActivity ? `${sign}${formatCOP(Math.abs(cat.total))}` : '<span style="color:var(--text-muted)">$0</span>';
       return `<div class="tx-group-item">
         <div class="tx-icon">${escHtml(cat.icon || '🏷️')}</div>
         <div class="tx-info">
-          <div class="tx-name"${!hasActivity ? ' style="color:var(--text-muted)"' : ''}>${escHtml(cat.name)}</div>
+          <div class="tx-name">${escHtml(cat.name)}</div>
         </div>
-        <div class="tx-amount ${cls}">${amt}</div>
+        <div class="tx-amount ${cls}">${sign}${formatCOP(Math.abs(cat.total))}</div>
         <button class="btn-cat-menu" data-id="${escHtml(cat.id)}" data-name="${escHtml(cat.name)}" data-icon="${escHtml(cat.icon || '')}" title="Opciones">···</button>
       </div>`;
     }
 
-    let html = '<div class="tx-group">';
-    if (active.length)  html += active.map(catRow).join('');
-    if (active.length && inactive.length) {
-      html += `<div class="tx-group-divider" style="font-size:11px;color:var(--text-muted);padding:6px 0 2px;border-top:1px solid var(--border);margin-top:4px;">Sin movimientos este mes</div>`;
-    }
-    if (inactive.length) html += inactive.map(catRow).join('');
-    html += '</div>';
-
-    list.innerHTML = html;
+    list.innerHTML = `<div class="tx-group">${active.map(catRow).join('')}</div>`;
 
     list.querySelectorAll('.btn-cat-menu').forEach(btn => {
       btn.addEventListener('click', (e) => {
