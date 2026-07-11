@@ -685,6 +685,12 @@ app.get('/api/export', async (req, res) => {
 });
 
 // ============================================================
+// CAPTURA AUTOMÁTICA — notificaciones + push tokens
+// ============================================================
+app.use('/api/notifications', require('./routes/notifications')(supabase));
+app.use('/api/push',          require('./routes/push')(supabase));
+
+// ============================================================
 // START
 // ============================================================
 app.listen(PORT, () => {
