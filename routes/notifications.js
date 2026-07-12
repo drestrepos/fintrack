@@ -67,7 +67,8 @@ module.exports = (supabase) => {
         system: SYSTEM_PROMPT,
         messages: [{ role: 'user', content: userContent }],
       });
-      parsed = JSON.parse(msg.content[0].text.trim());
+      const raw = msg.content[0].text.trim().replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+      parsed = JSON.parse(raw);
     } catch (err) {
       console.error('[classify] LLM/parse error:', err.message);
       return res.status(500).json({ error: 'Error al clasificar', detail: err.message });
