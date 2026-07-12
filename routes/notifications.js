@@ -55,7 +55,9 @@ module.exports = (supabase) => {
       `Texto: ${raw_text}`,
     ].filter(Boolean).join('\n');
 
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const anthropic = new Anthropic(
+      process.env.ANTHROPIC_API_KEY ? { apiKey: process.env.ANTHROPIC_API_KEY } : {}
+    );
 
     let parsed;
     try {

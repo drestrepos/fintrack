@@ -42,7 +42,11 @@ app.use('/api', (req, res, next) => {
 // HEALTH
 // ============================================================
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    anthropic_key_set: !!process.env.ANTHROPIC_API_KEY,
+  });
 });
 
 // ============================================================
