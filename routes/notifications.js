@@ -71,7 +71,7 @@ module.exports = (supabase) => {
       parsed = JSON.parse(raw);
     } catch (err) {
       console.error('[classify] LLM/parse error:', err.message);
-      return res.status(500).json({ error: 'Error al clasificar', detail: err.message });
+      return res.status(500).json({ error: 'Error al clasificar' });
     }
 
     if (!parsed.es_transaccion) {
