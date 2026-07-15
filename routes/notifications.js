@@ -78,19 +78,37 @@ module.exports = (supabase) => {
       return res.json({ es_transaccion: false });
     }
 
-    const userId       = req.user.id;
-    const amountCents  = parsed.monto != null ? Math.round(parsed.monto * 100) : null;
+    const userId      = req.user.id;
+    const amountCents = parsed.monto != null ? Math.round(parsed.monto * 100) : null;
+
+    // ── Match de cuenta sugerida ──────────────────────────────────────────────
+    let suggestedAccountId = null;
+    if (parsed.banco_identificado) {
+      const { data: accts } = await supabase
+        .from('accounts')
+        .select('id, last_four_digits')
+        .eq('user_id', userId)
+        .ilike('name', `%${parsed.banco_identificado}%`);
+
+      if (accts && accts.length === 1) {
+        suggestedAccountId = accts[0].id;
+      } else if (accts && accts.length > 1 && parsed.ultimos_digitos) {
+        const exact = accts.find(a => a.last_four_digits === parsed.ultimos_digitos);
+        if (exact) suggestedAccountId = exact.id;
+      }
+    }
 
     const { data, error } = await supabase
       .from('pending_transactions')
       .insert({
-        user_id:           userId,
-        source:            'notification',
+        user_id:              userId,
+        source:               'notification',
         raw_text,
-        bank_identified:   parsed.banco_identificado   ?? null,
-        amount:            amountCents,
-        type:              parsed.tipo                 ?? null,
-        merchant_or_party: parsed.comercio_o_contraparte ?? null,
+        bank_identified:      parsed.banco_identificado      ?? null,
+        amount:               amountCents,
+        type:                 parsed.tipo                    ?? null,
+        merchant_or_party:    parsed.comercio_o_contraparte  ?? null,
+        suggested_account_id: suggestedAccountId,
       })
       .select()
       .single();
