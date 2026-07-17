@@ -81,6 +81,14 @@ app.post('/api/auth/reset-password', async (req, res) => {
   res.json({ success: true });
 });
 
+app.post('/api/auth/refresh', async (req, res) => {
+  const { refresh_token } = req.body;
+  if (!refresh_token) return res.status(400).json({ error: 'refresh_token requerido' });
+  const { data, error } = await supabase.auth.refreshSession({ refresh_token });
+  if (error || !data.session) return res.status(401).json({ error: 'Sesión expirada, vuelve a iniciar sesión' });
+  res.json({ session: data.session });
+});
+
 // ============================================================
 // CUENTAS
 // ============================================================
