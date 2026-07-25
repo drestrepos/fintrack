@@ -85,7 +85,10 @@ app.post('/api/auth/refresh', async (req, res) => {
   const { refresh_token } = req.body;
   if (!refresh_token) return res.status(400).json({ error: 'refresh_token requerido' });
   const { data, error } = await supabase.auth.refreshSession({ refresh_token });
-  if (error || !data.session) return res.status(401).json({ error: 'Sesión expirada, vuelve a iniciar sesión' });
+  if (error || !data.session) {
+    console.error('[auth/refresh] Supabase rechazó el refresh —', error?.message, '| status:', error?.status, '| code:', error?.code, '| token (primeros 8):', refresh_token?.slice(0, 8));
+    return res.status(401).json({ error: 'Sesión expirada, vuelve a iniciar sesión' });
+  }
   res.json({ session: data.session });
 });
 
