@@ -84,7 +84,7 @@ module.exports = (supabase) => {
     // ── Match de cuenta sugerida ──────────────────────────────────────────────
     let suggestedAccountId = null;
     if (parsed.banco_identificado) {
-      const { data: accts } = await supabase
+      const { data: accts } = await req.supabase
         .from('accounts')
         .select('id, last_four_digits')
         .eq('user_id', userId)
@@ -98,7 +98,7 @@ module.exports = (supabase) => {
       }
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await req.supabase
       .from('pending_transactions')
       .insert({
         user_id:              userId,
@@ -124,7 +124,7 @@ module.exports = (supabase) => {
   // GET /api/notifications/pending
   router.get('/pending', async (req, res) => {
     const userId = req.user.id;
-    const { data, error } = await supabase
+    const { data, error } = await req.supabase
       .from('pending_transactions')
       .select('*')
       .eq('user_id', userId)
@@ -149,7 +149,7 @@ module.exports = (supabase) => {
       return res.status(400).json({ error: 'status debe ser confirmed o dismissed' });
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await req.supabase
       .from('pending_transactions')
       .update({ status, confirmed_transaction_id: confirmed_transaction_id ?? null })
       .eq('id', id)

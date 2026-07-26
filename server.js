@@ -14,6 +14,14 @@ const supabase = createClient(
   { realtime: { transport: ws } }
 );
 
+function createUserClient(token) {
+  return createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_ANON_KEY,
+    { global: { headers: { Authorization: `Bearer ${token}` } } }
+  );
+}
+
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
@@ -26,9 +34,11 @@ async function requireAuth(req, res, next) {
   if (!header?.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'No autorizado' });
   }
-  const { data: { user }, error } = await supabase.auth.getUser(header.slice(7));
+  const token = header.slice(7);
+  const { data: { user }, error } = await supabase.auth.getUser(token);
   if (error || !user) return res.status(401).json({ error: 'Sesión inválida o expirada' });
   req.user = user;
+  req.supabase = createUserClient(token);
   next();
 }
 
@@ -123,7 +133,7 @@ app.post('/api/accounts', async (req, res) => {
 
   if (storedBalance !== 0) {
     const today = new Date().toISOString().slice(0, 10);
-    await supabase.from('transactions').insert([{
+    await req.supabase.from('transactions').insert([{
       user_id: uid,
       account_id: data.id,
       description: 'Saldo inicial',
@@ -155,16 +165,16 @@ app.delete('/api/accounts/:id', async (req, res) => {
   const { id } = req.params;
   const uid = req.user.id;
   const [txCheck, jeCheck] = await Promise.all([
-    supabase.from('transactions').select('id', { count: 'exact', head: true })
+    req.supabase.from('transactions').select('id', { count: 'exact', head: true })
       .eq('account_id', id).eq('user_id', uid),
-    supabase.from('journal_entries').select('id', { count: 'exact', head: true })
+    req.supabase.from('journal_entries').select('id', { count: 'exact', head: true })
       .eq('account_id', id).eq('user_id', uid),
   ]);
   if (txCheck.error) return res.status(500).json({ error: txCheck.error.message });
   if (jeCheck.error) return res.status(500).json({ error: jeCheck.error.message });
   if ((txCheck.count || 0) > 0 || (jeCheck.count || 0) > 0)
     return res.status(409).json({ error: 'La cuenta tiene movimientos y no puede eliminarse' });
-  const { error } = await supabase.from('accounts').delete()
+  const { error } = await req.supabase.from('accounts').delete()
     .eq('id', id).eq('user_id', uid);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true });
@@ -219,7 +229,7 @@ app.delete('/api/categories/:id', async (req, res) => {
   if (txCheck.error) return res.status(500).json({ error: txCheck.error.message });
   if ((txCheck.count || 0) > 0)
     return res.status(409).json({ error: 'La categoría tiene transacciones y no puede eliminarse' });
-  const { error } = await supabase.from('categories').delete()
+  const { error } = await req.supabase.from('categories').delete()
     .eq('id', id).eq('user_id', uid);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true });
@@ -311,13 +321,13 @@ app.get('/api/dashboard', async (req, res) => {
   const end     = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
 
   const [accRes, allTxRes, monthTxRes] = await Promise.all([
-    supabase.from('accounts').select('id, type')
+    req.supabase.from('accounts').select('id, type')
       .eq('user_id', uid).eq('active', true),
     // REGLA 1: todas las transacciones para calcular saldo real (bank, wallet, cash, credit, person)
-    supabase.from('transactions').select('account_id, amount, type')
+    req.supabase.from('transactions').select('account_id, amount, type')
       .eq('user_id', uid),
     // REGLA 2: ingresos/gastos del mes — excluir 'Saldo inicial'
-    supabase.from('transactions').select('amount, type')
+    req.supabase.from('transactions').select('amount, type')
       .eq('user_id', uid).gte('date', start).lte('date', end)
       .not('description', 'eq', 'Saldo inicial'),
   ]);
@@ -369,7 +379,7 @@ app.get('/api/dashboard', async (req, res) => {
 app.get('/api/transactions/all', async (req, res) => {
   const uid = req.user.id;
   const raw = req.query.month;
-  let query = supabase
+  let query = req.supabase
     .from('transactions')
     .select('*, account:accounts(id,name,icon), category:categories(id,name,icon)')
     .eq('user_id', uid);
@@ -393,14 +403,14 @@ app.get('/api/accounts/:id/balance', async (req, res) => {
   const uid = req.user.id;
   const { id } = req.params;
 
-  const accRes = await supabase.from('accounts')
+  const accRes = await req.supabase.from('accounts')
     .select('type').eq('id', id).eq('user_id', uid).single();
   if (accRes.error) return res.status(500).json({ error: accRes.error.message });
 
   let balance = 0;
 
   // REGLA 1: balance = sum(credits) - sum(debits) de todas las transactions (sin journal_entries)
-  const txRes = await supabase.from('transactions').select('amount, type')
+  const txRes = await req.supabase.from('transactions').select('amount, type')
     .eq('account_id', id).eq('user_id', uid);
   if (txRes.error) return res.status(500).json({ error: txRes.error.message });
   txRes.data.forEach(tx => {
@@ -431,15 +441,15 @@ app.get('/api/resumen', async (req, res) => {
   const end     = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
 
   const [accRes, allTxRes, monthTxRes, catRes] = await Promise.all([
-    supabase.from('accounts').select('*')
+    req.supabase.from('accounts').select('*')
       .eq('user_id', uid).eq('active', true).order('name'),
     // REGLA 1: todas las transacciones para calcular saldo real (todas las cuentas)
-    supabase.from('transactions').select('account_id, amount, type')
+    req.supabase.from('transactions').select('account_id, amount, type')
       .eq('user_id', uid),
-    supabase.from('transactions')
+    req.supabase.from('transactions')
       .select('category_id, amount, type')
       .eq('user_id', uid).gte('date', start).lte('date', end),
-    supabase.from('categories').select('id, name, icon, color')
+    req.supabase.from('categories').select('id, name, icon, color')
       .eq('user_id', uid).order('name'),
   ]);
 
@@ -520,7 +530,7 @@ app.post('/api/journal-entries', async (req, res) => {
     amount:     Math.round(e.amount || 0),
     note:       e.note || null,
   }));
-  const { data, error } = await supabase.from('journal_entries').insert(rows).select();
+  const { data, error } = await req.supabase.from('journal_entries').insert(rows).select();
   if (error) return res.status(500).json({ error: error.message });
   res.status(201).json(data);
 });
@@ -568,10 +578,10 @@ app.get('/api/budgets', async (req, res) => {
   const end      = `${monthKey}-${String(lastDay).padStart(2, '0')}`;
 
   const [budgetsRes, txRes] = await Promise.all([
-    supabase.from('budgets')
+    req.supabase.from('budgets')
       .select('*, category:categories(id, name, icon)')
       .eq('month', monthKey).eq('user_id', uid).order('created_at'),
-    supabase.from('transactions')
+    req.supabase.from('transactions')
       .select('category_id, amount, type, description')
       .eq('user_id', uid).gte('date', start).lte('date', end),
   ]);
@@ -633,7 +643,7 @@ app.patch('/api/budgets/:id', async (req, res) => {
 
 app.delete('/api/budgets/:id', async (req, res) => {
   const uid = req.user.id;
-  const { error } = await supabase.from('budgets').delete()
+  const { error } = await req.supabase.from('budgets').delete()
     .eq('id', req.params.id).eq('user_id', uid);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true });

@@ -13,7 +13,7 @@ module.exports = (supabase) => {
       return res.status(400).json({ error: 'expo_push_token requerido' });
     }
 
-    const { error } = await supabase
+    const { error } = await req.supabase
       .from('push_tokens')
       .upsert(
         { user_id: userId, expo_push_token, updated_at: new Date().toISOString() },
